@@ -138,6 +138,35 @@ dotnet run --project src/OrgInventoryAgent -c Release -- \
 msiexec /i OrgInventoryAgent.msi /qn ENROLL_TOKEN="<TOKEN_CỦA_BẠN>" ENDPOINTS="https://agent.example.gov.vn"
 ```
 
+## Nguồn cấu hình: binary từ GitHub, cấu hình từ backend
+
+Giống Velociraptor (`client.config.yaml`): MSI/binary tải từ GitHub Releases, còn file
+cấu hình `agent.config.yaml` LUÔN do backend sinh động từ cấu hình agent hiệu lực trên
+portal (`GET <portal>/download/agent.config.yaml`, không redirect sang GitHub). Installer
+tải file này (verify header `X-Content-SHA256` + có `server_urls`), lỗi → dừng cài đặt:
+
+| Nền tảng | Vị trí file |
+|---|---|
+| Windows | `%ProgramData%\OrgInventory\agent.config.yaml` |
+| Linux   | `/etc/orginventory/agent.config.yaml` |
+
+```yaml
+version: 1
+server_urls:
+- https://agent.example.gov.vn
+portal_url: https://portal.example.gov.vn
+heartbeat_interval_seconds: 30
+heartbeat_jitter_seconds: 8
+inventory_interval_hours: 24
+renew_before_percent: 70
+agent_config_hash: <sha256>
+```
+
+Agent đọc file khi khởi động (`--client-config <path>` để đổi đường dẫn) và chỉ áp dụng khi
+nội dung đổi so với lần trước (SHA-256 lưu trong `config.json` → `clientConfigHash`), nên
+thay đổi server đẩy về sau enroll (`GET /api/agent/config`, heartbeat) không bị file cũ ghi
+đè khi restart. File lỗi/không hợp lệ → bỏ qua, giữ cấu hình hiện tại.
+
 ## Cơ chế Cấu hình Động (Config-driven) & Chống Can Thiệp (Tamper-proof)
 
 Agent hoàn toàn không dán cứng IP/domain hay tần suất heartbeat trong binary:

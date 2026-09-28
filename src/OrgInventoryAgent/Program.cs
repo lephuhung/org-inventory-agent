@@ -80,6 +80,12 @@ internal static class Program
 
         var config = AgentConfig.Load();
 
+        // agent.config.yaml do backend sinh (installer tải về cạnh config.json)
+        if (ClientConfig.TryApplyFile(config, cli.ClientConfigPath ?? AppPaths.ClientConfigFile, out var clientCfgError)
+            && !cli.PrintConfig)
+            config.Save();
+        if (clientCfgError is not null) Console.Error.WriteLine($"[config] {clientCfgError}");
+
         // Ghi đè endpoint từ CLI (dev/test)
         if (!string.IsNullOrWhiteSpace(cli.Endpoint))
             config.SetPrimaryEndpoint(cli.Endpoint);
@@ -112,6 +118,8 @@ internal static class Program
                 renew_after = config.RenewAfter,
                 http_proxy = config.HttpProxy,
                 config_version = config.ConfigVersion,
+                client_config_path = cli.ClientConfigPath ?? AppPaths.ClientConfigFile,
+                client_config_hash = config.ClientConfigHash,
             };
             Console.WriteLine(JsonSerializer.Serialize(masked, new JsonSerializerOptions { WriteIndented = true }));
             return 0;
@@ -286,6 +294,8 @@ internal static class Program
                                       (hoặc env ORGINVENTORY_DATA_DIR)
               --enroll-token <token>  Token enroll (1 lần). Lưu vào config tới khi enroll xong.
               --endpoint <url>        Endpoint server (primary). Ghi đè config.
+              --client-config <path>  File agent.config.yaml do backend sinh. Mặc định:
+                                      <data-dir>\agent.config.yaml
               --print-config          In cấu hình hiện tại (token được che) rồi thoát.
               --print-fingerprint     Thu thập và in fingerprint 3 nguồn rồi thoát.
               --print-inventory       Thu thập và in toàn bộ JSON Inventory rồi thoát.
@@ -343,6 +353,7 @@ internal sealed class CliArgs
     public string? DataDir { get; private set; }
     public string? EnrollToken { get; private set; }
     public string? Endpoint { get; private set; }
+    public string? ClientConfigPath { get; private set; }
     public int? InventorySeconds { get; private set; }
     public bool PrintConfig { get; private set; }
     public bool PrintFingerprint { get; private set; }
@@ -369,6 +380,7 @@ internal sealed class CliArgs
                 case "--data-dir": cli.DataDir = Next(); break;
                 case "--enroll-token": cli.EnrollToken = Next(); break;
                 case "--endpoint": cli.Endpoint = Next(); break;
+                case "--client-config": cli.ClientConfigPath = Next(); break;
                 case "--inventory-seconds":
                 case "--inventory-interval":
                     if (int.TryParse(Next(), out var sec)) cli.InventorySeconds = sec;

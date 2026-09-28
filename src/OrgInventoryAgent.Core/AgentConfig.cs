@@ -48,6 +48,9 @@ public sealed class AgentConfig
     public string? CsrCnPlaceholder { get; set; } // CN dùng cho CSR lúc enroll (chưa biết machine_id)
     public int ConfigVersion { get; set; } = 1;
 
+    /// <summary>SHA-256 của agent.config.yaml (backend sinh) đã áp dụng lần cuối.</summary>
+    public string? ClientConfigHash { get; set; }
+
     // ─────────────────────────────────────────────────────────────
 
     public static AgentConfig Load(string? file = null)
