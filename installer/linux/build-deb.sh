@@ -30,7 +30,6 @@ dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.
   -c Release -r "$RID" --self-contained true \
   -p:PublishSingleFile=true \
   -p:EnableCompressionInSingleFile=false \
-  -p:IncludeNativeLibrariesForSelfExtract=false \
   -o "$PKGROOT/opt/orginventory" -p:ApplicationIcon=
 
 # Ghi VERSION cạnh binary — install.sh dùng để so sánh manifest auto-upgrade

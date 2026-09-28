@@ -206,3 +206,23 @@ bash installer/linux/build-deb.sh linux-x64
 # Đóng gói .rpm (RHEL/Rocky/Alma)
 bash installer/linux/build-rpm.sh linux-x64
 ```
+
+## Cài đặt từ GitHub Releases (không cần clone)
+
+Workflow [`release.yml`](.github/workflows/release.yml) build theo git tag (`v*`) hoặc
+`workflow_dispatch` → đẩy lên GitHub Releases: `OrgInventoryAgent.msi`, binary
+`OrgInventoryAgent-linux-x64/-arm64` (+ `.sha256`, `.version`), `.deb`, `.rpm`,
+`agent-version.json` (manifest auto-upgrade) và các script cài.
+
+```bash
+# Linux (OrgInventory + Velociraptor):
+curl -fsSL https://github.com/<org>/org-inventory-agent/releases/latest/download/install.sh \
+  | sudo ORGINVENTORY_TOKEN=t_xxx ORGINVENTORY_PORTAL_URL=https://portal.example.com bash
+
+# Windows (PowerShell admin):
+$env:ORGINVENTORY_TOKEN="t_xxx"; $env:ORGINVENTORY_PORTAL_URL="https://portal.example.com"
+irm https://github.com/<org>/org-inventory-agent/releases/latest/download/install.ps1 | iex
+
+# Windows air-gap: tải offline package từ portal (install-offline.cmd + MSI + server_public_key.pem)
+# rồi copy qua USB — xem docs/OFFLINE_AGENT_SPEC.md
+```

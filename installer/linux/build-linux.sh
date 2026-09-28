@@ -9,7 +9,6 @@ for RID in linux-x64 linux-arm64; do
       -c Release -r "$RID" --self-contained true \
       -p:PublishSingleFile=true \
       -p:EnableCompressionInSingleFile=false \
-      -p:IncludeNativeLibrariesForSelfExtract=false \
       -o "$DIST/$RID" -p:ApplicationIcon=
 
 done
