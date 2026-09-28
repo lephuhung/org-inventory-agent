@@ -1,4 +1,4 @@
-# install.ps1 — cài OrgInventory Agent trên Windows (OrgInventory only).
+﻿# install.ps1 — cài OrgInventory Agent trên Windows (OrgInventory only).
 # Yêu cầu: PowerShell 5.1+ (Windows 10/11), quyền Administrator.
 # Quy trình: kiểm tra quyền → tải MSI → verify SHA256 + chữ ký → msiexec /qn.
 #
