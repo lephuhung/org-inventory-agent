@@ -24,7 +24,11 @@ if (-not $AgentServerUrl) { $AgentServerUrl = $PortalUrl }
 
 $baseUrl = $PortalUrl.TrimEnd('/')
 $msiUrl = "$baseUrl/download/agent.msi"
-$msiPath = Join-Path $env:TEMP "agent-$Token.msi"
+# MSI cài từ cache ổn định (không phải %TEMP%): giữ file lại sau cài để Windows
+# Installer resolve được InstallSource cho repair/reenroll cùng ProductCode —
+# cài từ %TEMP% rồi xoá sẽ làm mọi repair/reinstall sau đó fail msiexec 1603.
+$msiCacheDir = Join-Path $env:ProgramData 'OrgInventory\pkgcache'
+$msiPath = Join-Path $msiCacheDir 'OrgInventoryAgent.msi'
 $logPath = Join-Path $env:TEMP 'agent-install.log'
 
 Write-Host ''
@@ -95,6 +99,7 @@ if ($productCode) {
 # 3. Tải MSI
 Write-Host "[1/4] Đang tải agent từ $msiUrl ..." -ForegroundColor Cyan
 try {
+    New-Item -ItemType Directory -Force -Path $msiCacheDir | Out-Null
     Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing -TimeoutSec 60
     Unblock-File -Path $msiPath -ErrorAction SilentlyContinue
 } catch {
@@ -175,8 +180,7 @@ if ($install.ExitCode -ne 0) {
     exit 1
 }
 
-# 7. Hoàn tất
-Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
+# 7. Hoàn tất — giữ MSI trong pkgcache làm InstallSource cho repair/reenroll về sau
 try { Remove-MpPreference -ExclusionPath $msiPath -ErrorAction SilentlyContinue } catch { }
 Write-Host '[4/4] Hoàn tất.' -ForegroundColor Cyan
 Write-Host ''
