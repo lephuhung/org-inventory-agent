@@ -72,13 +72,22 @@ if (-not (Test-Path $AgentExe)) { throw "Khong thay $AgentExe sau khi publish" }
 $SqliteDll = Join-Path $PublishDir "e_sqlite3.dll"
 if (-not (Test-Path $SqliteDll)) { throw "Khong thay $SqliteDll sau khi publish - OfflineCache can SQLite native lib" }
 
-# 3b. WiX Util extension (util:ServiceConfig cho restart-on-failure), pin cung version WiX
-$WixExtUtil = "WixToolset.Util.wixext/$WixVersion"
-if (-not (& wix extension list 2>$null | Select-String -Quiet "WixToolset.Util.wixext/$WixVersion")) {
-    Write-Host "Cai $WixExtUtil..."
-    & wix extension add $WixExtUtil
-    if ($LASTEXITCODE -ne 0) { throw "Cai WiX Util extension that bai" }
+# 3b. WiX Util extension (util:ServiceConfig cho restart-on-failure), pin cung major WiX.
+# NuGet version co build metadata (5.0.2+aa65968c) nen phai resolve ten cache thuc te.
+function Get-UtilExt {
+    & wix extension list 2>$null | ForEach-Object {
+        if ($_ -match 'WixToolset\.Util\.wixext/(5\.[^\s]+)') { "WixToolset.Util.wixext/$($Matches[1])" }
+    } | Select-Object -First 1
 }
+$WixExtUtil = Get-UtilExt
+if (-not $WixExtUtil) {
+    Write-Host "Cai WixToolset.Util.wixext/$WixVersion..."
+    & wix extension add "WixToolset.Util.wixext/$WixVersion"
+    if ($LASTEXITCODE -ne 0) { throw "Cai WiX Util extension that bai" }
+    $WixExtUtil = Get-UtilExt
+    if (-not $WixExtUtil) { throw "Khong tim thay WixToolset.Util.wixext 5.x trong extension cache" }
+}
+Write-Host "Util extension: $WixExtUtil"
 
 # 4. Build MSI
 Write-Host "Build MSI..."
