@@ -73,11 +73,21 @@ $SqliteDll = Join-Path $PublishDir "e_sqlite3.dll"
 if (-not (Test-Path $SqliteDll)) { throw "Khong thay $SqliteDll sau khi publish - OfflineCache can SQLite native lib" }
 
 # 3b. WiX Util extension (util:ServiceConfig cho restart-on-failure), pin cung major WiX.
-# NuGet version co build metadata (5.0.2+aa65968c) nen phai resolve ten cache thuc te.
+# NuGet version co build metadata (5.0.2+aa65968c) nen resolve ten thu muc cache thuc te
+# thay vi parse `wix extension list` (format khac nhau giua cac ban).
+$ExtCacheDirs = @(
+    (Join-Path $Root ".wix\extensions\WixToolset.Util.wixext"),
+    (Join-Path $env:USERPROFILE ".wix\extensions\WixToolset.Util.wixext")
+)
 function Get-UtilExt {
-    & wix extension list 2>$null | ForEach-Object {
-        if ($_ -match 'WixToolset\.Util\.wixext/(5\.[^\s]+)') { "WixToolset.Util.wixext/$($Matches[1])" }
-    } | Select-Object -First 1
+    foreach ($d in $ExtCacheDirs) {
+        if (Test-Path $d) {
+            $v = Get-ChildItem $d -Directory | Where-Object { $_.Name -like "5.*" } |
+                Sort-Object Name -Descending | Select-Object -First 1
+            if ($v) { return "WixToolset.Util.wixext/$($v.Name)" }
+        }
+    }
+    return $null
 }
 $WixExtUtil = Get-UtilExt
 if (-not $WixExtUtil) {
