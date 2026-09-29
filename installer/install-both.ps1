@@ -295,7 +295,9 @@ if (-not $SkipOrgInventory) {
 
         # Verify SHA256
         try {
-            $expected = (Invoke-WebRequest -Uri "$PortalUrl/download/agent.msi.sha256" -UseBasicParsing -TimeoutSec 30).Content.Trim().Split()[0]
+            $shaText = (Invoke-WebRequest -Uri "$PortalUrl/download/agent.msi.sha256" -UseBasicParsing -TimeoutSec 30).Content
+            if ($shaText -is [byte[]]) { $shaText = [Text.Encoding]::UTF8.GetString($shaText) }
+            $expected = "$shaText".Trim().Split()[0]
             $actual = (Get-FileHash -Path $msiPath -Algorithm SHA256).Hash.ToLower()
             if ($expected.ToLower() -ne $actual) {
                 Write-Fail "SHA256 khong khop (server: $expected, file: $actual) - dung cai dat."

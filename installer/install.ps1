@@ -105,7 +105,10 @@ try {
 # 4. Verify SHA256 (file .sha256 do server cung cấp cạnh MSI)
 Write-Host '[2/4] Xác thực file (SHA256 + chữ ký số) ...' -ForegroundColor Cyan
 try {
-    $expectedHash = (Invoke-WebRequest -Uri "$baseUrl/download/agent.msi.sha256" -UseBasicParsing -TimeoutSec 30).Content.Trim().Split()[0]
+    # .Content la byte[] khi server serve octet-stream (vd GitHub Releases) — decode UTF8 truoc khi parse
+    $shaText = (Invoke-WebRequest -Uri "$baseUrl/download/agent.msi.sha256" -UseBasicParsing -TimeoutSec 30).Content
+    if ($shaText -is [byte[]]) { $shaText = [Text.Encoding]::UTF8.GetString($shaText) }
+    $expectedHash = "$shaText".Trim().Split()[0]
     $actualHash = (Get-FileHash -Path $msiPath -Algorithm SHA256).Hash.ToLower()
     if ($expectedHash.ToLower() -ne $actualHash) {
         Write-Host "[LỖI] SHA256 không khớp (server: $expectedHash, file: $actualHash). Đã dừng cài đặt." -ForegroundColor Red
@@ -114,7 +117,7 @@ try {
     }
     Write-Host '      ✓ SHA256 khớp' -ForegroundColor Green
 } catch {
-    Write-Host '      ⚠ Không verify được SHA256 (thiếu agent.msi.sha256 trên server) — tiếp tục.' -ForegroundColor Yellow
+    Write-Host '      ⚠ Không đọc được hash từ server (agent.msi.sha256) — bỏ qua verify SHA256, tiếp tục.' -ForegroundColor Yellow
 }
 
 # 5. Verify chữ ký Authenticode
