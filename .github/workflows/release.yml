@@ -51,7 +51,8 @@ jobs:
             -replace '<FileVersion>[^<]*</FileVersion>', "<FileVersion>$v.0</FileVersion>" |
             Set-Content $csproj -NoNewline -Encoding utf8
           $wxs = "installer/Product.wxs"
-          (Get-Content $wxs -Raw) -replace 'Version="[\d.]+"', "Version=`"$v`"" |
+          # -creplace: case-sensitive — version="1.0" trong <?xml decl phai giu nguyen chu thuong
+          (Get-Content $wxs -Raw) -creplace 'Version="[\d.]+"', "Version=`"$v`"" |
             Set-Content $wxs -NoNewline -Encoding utf8
       - name: Build MSI
         shell: pwsh
