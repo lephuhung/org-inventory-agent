@@ -126,24 +126,40 @@ jobs:
           pattern: "*"
           merge-multiple: true
           path: assets
+      - name: Stage release assets (flatten — chỉ file, không thư mục staging)
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          # Windows MSI + checksum (artifact merge-multiple đặt file ở top-level assets/)
+          cp assets/OrgInventoryAgent.msi assets/OrgInventoryAgent.msi.sha256 release-assets/
+          # Linux single-file binaries + checksum + version sidecar
+          for RID in linux-x64 linux-arm64; do
+            cp "assets/$RID/OrgInventoryAgent-$RID" \
+               "assets/$RID/OrgInventoryAgent-$RID.sha256" \
+               "assets/$RID/OrgInventoryAgent-$RID.version" release-assets/
+          done
+          # Packages (.deb top-level; .rpm nằm sâu trong rpm/RPMS/<arch>/)
+          cp assets/orginventory-agent_*.deb release-assets/
+          find assets/rpm -name '*.rpm' -exec cp {} release-assets/ \;
+          # Install scripts (canonical trên Releases)
+          cp installer/install.sh installer/install.ps1 installer/install-both.ps1 \
+             installer/offline/install-offline.ps1 installer/offline/install-offline.cmd \
+             release-assets/
+          ls -la release-assets/
       - name: Manifest agent-version.json
         run: |
           V="${{ needs.version.outputs.version }}"
-          cat > assets/agent-version.json <<EOF
+          cat > release-assets/agent-version.json <<EOF
           {"msi_version": "$V", "linux": {"linux-x64": "$V", "linux-arm64": "$V"}, "velociraptor_msi_version": null}
           EOF
-          cat assets/agent-version.json
+          cat release-assets/agent-version.json
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.version.outputs.tag }}
         run: |
           gh release create "$TAG" \
+            --target "${{ github.sha }}" \
             --title "OrgInventory Agent $TAG" \
             --generate-notes \
-            assets/* \
-            installer/install.sh \
-            installer/install.ps1 \
-            installer/install-both.ps1 \
-            installer/offline/install-offline.ps1 \
-            installer/offline/install-offline.cmd
+            release-assets/*
