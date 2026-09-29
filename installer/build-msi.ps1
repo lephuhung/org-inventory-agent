@@ -72,16 +72,17 @@ if (-not (Test-Path $AgentExe)) { throw "Khong thay $AgentExe sau khi publish" }
 $SqliteDll = Join-Path $PublishDir "e_sqlite3.dll"
 if (-not (Test-Path $SqliteDll)) { throw "Khong thay $SqliteDll sau khi publish - OfflineCache can SQLite native lib" }
 
-# 3b. WiX Util extension (util:ServiceConfig cho restart-on-failure)
-if (-not (& wix extension list 2>$null | Select-String -Quiet "WixToolset.Util")) {
-    Write-Host "Cai WixToolset.Util.wixext..."
-    & wix extension add WixToolset.Util.wixext
+# 3b. WiX Util extension (util:ServiceConfig cho restart-on-failure), pin cung version WiX
+$WixExtUtil = "WixToolset.Util.wixext/$WixVersion"
+if (-not (& wix extension list 2>$null | Select-String -Quiet "WixToolset.Util.wixext/$WixVersion")) {
+    Write-Host "Cai $WixExtUtil..."
+    & wix extension add $WixExtUtil
     if ($LASTEXITCODE -ne 0) { throw "Cai WiX Util extension that bai" }
 }
 
 # 4. Build MSI
 Write-Host "Build MSI..."
-& wix build $Wxs -ext WixToolset.Util.wixext -d AgentExe=$AgentExe -d AgentSqliteDll=$SqliteDll -o $Msi -arch x64
+& wix build $Wxs -ext $WixExtUtil -d AgentExe=$AgentExe -d AgentSqliteDll=$SqliteDll -o $Msi -arch x64
 if ($LASTEXITCODE -ne 0) { throw "wix build that bai" }
 
 # 5. Ky Authenticode (neu co)
