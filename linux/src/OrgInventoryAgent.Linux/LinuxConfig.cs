@@ -19,6 +19,19 @@ namespace OrgInventoryAgent.Linux;
 public static class LinuxConfig
 {
     public const string DefaultConfigPath = "/etc/orginventory/config.json";
+    public const string DefaultClientConfigPath = "/etc/orginventory/" + ClientConfig.FileName;
+
+    /// <summary>
+    /// Load + áp dụng agent.config.yaml (backend sinh) nếu file mới/đã đổi. Khi đổi, chỉ lưu
+    /// state (AppPaths.ConfigFile) — service chạy user orginventory không ghi được /etc.
+    /// </summary>
+    public static AgentConfig LoadWithClientConfig(string? path, string? clientConfigPath, bool persist, out string? error)
+    {
+        var cfg = Load(path);
+        if (ClientConfig.TryApplyFile(cfg, clientConfigPath ?? DefaultClientConfigPath, out error) && persist)
+            cfg.Save();
+        return cfg;
+    }
 
     public static AgentConfig Load(string? path = null)
     {
@@ -91,6 +104,14 @@ public static class LinuxConfig
             cfg.InventoryIntervalSeconds = state.InventoryIntervalSeconds;
         if (state.RenewBeforePercent != defaults.RenewBeforePercent)
             cfg.RenewBeforePercent = state.RenewBeforePercent;
+
+        // Đã áp dụng agent.config.yaml → endpoints trong state (từ file backend hoặc server
+        // sync sau đó) là nguồn chân lý, không lấy endpoints bootstrap.
+        if (!string.IsNullOrWhiteSpace(state.ClientConfigHash))
+        {
+            cfg.ClientConfigHash = state.ClientConfigHash;
+            if (state.Endpoints.Length > 0) cfg.Endpoints = state.Endpoints;
+        }
     }
 
     private static bool PathsEqual(string a, string b)

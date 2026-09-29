@@ -12,6 +12,7 @@ public static class AppPaths
     public static string DataDir => _dataDir;
 
     public static string ConfigFile => Path.Combine(DataDir, "config.json");
+    public static string ClientConfigFile => Path.Combine(DataDir, ClientConfig.FileName);
     public static string StateFile => Path.Combine(DataDir, "state.json");
     public static string CacheDbFile => Path.Combine(DataDir, "cache.db");
     public static string LogsDir => Path.Combine(DataDir, "logs");

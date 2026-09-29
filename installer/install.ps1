@@ -24,7 +24,11 @@ if (-not $AgentServerUrl) { $AgentServerUrl = $PortalUrl }
 
 $baseUrl = $PortalUrl.TrimEnd('/')
 $msiUrl = "$baseUrl/download/agent.msi"
-$msiPath = Join-Path $env:TEMP "agent-$Token.msi"
+# MSI cài từ cache ổn định (không phải %TEMP%): giữ file lại sau cài để Windows
+# Installer resolve được InstallSource cho repair/reenroll cùng ProductCode —
+# cài từ %TEMP% rồi xoá sẽ làm mọi repair/reinstall sau đó fail msiexec 1603.
+$msiCacheDir = Join-Path $env:ProgramData 'OrgInventory\pkgcache'
+$msiPath = Join-Path $msiCacheDir 'OrgInventoryAgent.msi'
 $logPath = Join-Path $env:TEMP 'agent-install.log'
 
 Write-Host ''
@@ -95,6 +99,7 @@ if ($productCode) {
 # 3. Tải MSI
 Write-Host "[1/4] Đang tải agent từ $msiUrl ..." -ForegroundColor Cyan
 try {
+    New-Item -ItemType Directory -Force -Path $msiCacheDir | Out-Null
     Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing -TimeoutSec 60
     Unblock-File -Path $msiPath -ErrorAction SilentlyContinue
 } catch {
@@ -105,7 +110,10 @@ try {
 # 4. Verify SHA256 (file .sha256 do server cung cấp cạnh MSI)
 Write-Host '[2/4] Xác thực file (SHA256 + chữ ký số) ...' -ForegroundColor Cyan
 try {
-    $expectedHash = (Invoke-WebRequest -Uri "$baseUrl/download/agent.msi.sha256" -UseBasicParsing -TimeoutSec 30).Content.Trim().Split()[0]
+    # .Content la byte[] khi server serve octet-stream (vd GitHub Releases) — decode UTF8 truoc khi parse
+    $shaText = (Invoke-WebRequest -Uri "$baseUrl/download/agent.msi.sha256" -UseBasicParsing -TimeoutSec 30).Content
+    if ($shaText -is [byte[]]) { $shaText = [Text.Encoding]::UTF8.GetString($shaText) }
+    $expectedHash = "$shaText".Trim().Split()[0]
     $actualHash = (Get-FileHash -Path $msiPath -Algorithm SHA256).Hash.ToLower()
     if ($expectedHash.ToLower() -ne $actualHash) {
         Write-Host "[LỖI] SHA256 không khớp (server: $expectedHash, file: $actualHash). Đã dừng cài đặt." -ForegroundColor Red
@@ -114,7 +122,7 @@ try {
     }
     Write-Host '      ✓ SHA256 khớp' -ForegroundColor Green
 } catch {
-    Write-Host '      ⚠ Không verify được SHA256 (thiếu agent.msi.sha256 trên server) — tiếp tục.' -ForegroundColor Yellow
+    Write-Host '      ⚠ Không đọc được hash từ server (agent.msi.sha256) — bỏ qua verify SHA256, tiếp tục.' -ForegroundColor Yellow
 }
 
 # 5. Verify chữ ký Authenticode
@@ -133,6 +141,31 @@ if ($sig.Status -eq 'Valid') {
     Write-Host "      ⚠ MSI KHÔNG ký Authenticode (Status: $($sig.Status)) — bỏ qua vì ORGINV_ALLOW_UNSIGNED=1 (CHỈ DÙNG TEST)" -ForegroundColor Yellow
 }
 
+function Save-OiClientConfig([string]$BaseUrl) {
+    # MSI có thể tải từ GitHub Releases, nhưng cấu hình agent LUÔN do backend sinh
+    # (giống client.config.yaml của Velociraptor) → %ProgramData%\OrgInventory\agent.config.yaml.
+    $resp = Invoke-WebRequest -Uri "$BaseUrl/download/agent.config.yaml" -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+    $bytes = $resp.RawContentStream.ToArray()
+    $actual = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLower()
+    $expected = @($resp.Headers['X-Content-SHA256'])[0]
+    if ($expected -and $expected.ToLower() -ne $actual) { throw "SHA256 cau hinh khong khop (server: $expected, file: $actual)" }
+    if (-not [Text.Encoding]::UTF8.GetString($bytes).Contains('server_urls:')) { throw "File cau hinh khong hop le (thieu server_urls)" }
+    $dir = Join-Path $env:ProgramData 'OrgInventory'
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $path = Join-Path $dir 'agent.config.yaml'
+    [IO.File]::WriteAllBytes($path, $bytes)
+    return $path
+}
+
+Write-Host '[3/4] Tải cấu hình agent từ backend ...' -ForegroundColor Cyan
+try {
+    $clientCfg = Save-OiClientConfig $baseUrl
+    Write-Host "      ✓ $clientCfg" -ForegroundColor Green
+} catch {
+    Write-Host "[LỖI] Không tải được cấu hình agent từ backend: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
 # 6. Cài đặt silent — MSI nhận TOKEN và ENDPOINTS qua property (agent tự enroll sau khi cài)
 Write-Host '[3/4] Cài đặt agent (silent) ...' -ForegroundColor Cyan
 $install = Start-Process msiexec.exe -ArgumentList @(
@@ -147,8 +180,7 @@ if ($install.ExitCode -ne 0) {
     exit 1
 }
 
-# 7. Hoàn tất
-Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
+# 7. Hoàn tất — giữ MSI trong pkgcache làm InstallSource cho repair/reenroll về sau
 try { Remove-MpPreference -ExclusionPath $msiPath -ErrorAction SilentlyContinue } catch { }
 Write-Host '[4/4] Hoàn tất.' -ForegroundColor Cyan
 Write-Host ''

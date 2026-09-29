@@ -35,6 +35,8 @@ public class Program
                 Sử dụng: OrgInventoryAgent [tùy chọn]
                   --data-dir <path>        Thư mục dữ liệu (config/cache/log)
                   --config <path>          File config.json (mặc định /etc/orginventory/config.json)
+                  --client-config <path>   File agent.config.yaml do backend sinh
+                                           (mặc định /etc/orginventory/agent.config.yaml)
                   --enroll-token <token>   Enroll token (lưu vào config, xóa sau enroll)
                   --endpoint <url>         Server URL mTLS
                   --inventory-seconds <n>  Chu kỳ inventory (giây, test)
@@ -53,11 +55,14 @@ public class Program
         if (cli.PrintAbout) { Console.WriteLine(AppInfo.TransparencyAndSafetyCommitment); return 0; }
         if (cli.PrintConfig)
         {
-            var cfg = LinuxConfig.Load(cli.ConfigPath);
+            var cfg = LinuxConfig.LoadWithClientConfig(cli.ConfigPath, cli.ClientConfigPath, persist: false, out var printCfgError);
+            if (printCfgError is not null) Console.Error.WriteLine($"[config] {printCfgError}");
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 data_dir = AppPaths.DataDir,
                 config_path = cli.ConfigPath ?? LinuxConfig.DefaultConfigPath,
+                client_config_path = cli.ClientConfigPath ?? LinuxConfig.DefaultClientConfigPath,
+                client_config_hash = cfg.ClientConfigHash,
                 endpoints = cfg.Endpoints,
                 heartbeat_interval_seconds = cfg.HeartbeatIntervalSeconds,
                 heartbeat_jitter_seconds = cfg.HeartbeatJitterSeconds,
@@ -95,7 +100,8 @@ public class Program
             return 0;
         }
 
-        var config = LinuxConfig.Load(cli.ConfigPath);
+        var config = LinuxConfig.LoadWithClientConfig(cli.ConfigPath, cli.ClientConfigPath, persist: true, out var clientCfgError);
+        if (clientCfgError is not null) Console.Error.WriteLine($"[config] {clientCfgError}");
         if (!string.IsNullOrWhiteSpace(cli.Endpoint)) config.SetPrimaryEndpoint(cli.Endpoint);
         if (cli.InventorySeconds.HasValue) config.InventoryIntervalSeconds = cli.InventorySeconds.Value;
         if (!string.IsNullOrWhiteSpace(cli.EnrollToken)) { config.Token = cli.EnrollToken; LinuxConfig.Save(config, cli.ConfigPath); }

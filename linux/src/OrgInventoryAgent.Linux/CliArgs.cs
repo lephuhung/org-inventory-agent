@@ -5,6 +5,7 @@ internal sealed class CliArgs
 {
     public string? DataDir { get; private set; }
     public string? ConfigPath { get; private set; }
+    public string? ClientConfigPath { get; private set; }
     public string? EnrollToken { get; private set; }
     public string? Endpoint { get; private set; }
     public int? InventorySeconds { get; private set; }
@@ -29,6 +30,7 @@ internal sealed class CliArgs
             {
                 case "--data-dir": cli.DataDir = Next(); break;
                 case "--config": cli.ConfigPath = Next(); break;
+                case "--client-config": cli.ClientConfigPath = Next(); break;
                 case "--enroll-token": cli.EnrollToken = Next(); break;
                 case "--endpoint": cli.Endpoint = Next(); break;
                 case "--inventory-seconds":

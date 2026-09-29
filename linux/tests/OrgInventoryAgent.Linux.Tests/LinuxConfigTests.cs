@@ -62,4 +62,33 @@ public class LinuxConfigTests
         Assert.Equal("https://agent.local", cfg.PrimaryEndpoint); // từ bootstrap
         Directory.Delete(dir, recursive: true);
     }
+
+    [Fact]
+    public void LoadWithClientConfig_AppliesBackendYaml_AndSurvivesRestart()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "LinuxClientCfg_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        AppPaths.Initialize(dir);
+        var bootstrapPath = Path.Combine(dir, "bootstrap.json");
+        File.WriteAllText(bootstrapPath, """{"endpoints":["https://bootstrap.local"],"enroll_token":"t_abc"}""");
+        var yamlPath = Path.Combine(dir, ClientConfig.FileName);
+        File.WriteAllText(yamlPath, "version: 1\nserver_urls:\n- https://agent.backend.local\nheartbeat_interval_seconds: 90\n");
+
+        var cfg = LinuxConfig.LoadWithClientConfig(bootstrapPath, yamlPath, persist: true, out var error);
+
+        Assert.Null(error);
+        Assert.Equal("https://agent.backend.local", cfg.PrimaryEndpoint);
+        Assert.Equal(90, cfg.HeartbeatIntervalSeconds);
+        Assert.Equal("t_abc", cfg.Token);
+
+        // Server sync đổi endpoint sau đó → restart không bị bootstrap/yaml cũ ghi đè
+        cfg.ApplyServerSettings("https://agent.synced.local", null, null, null, null);
+        cfg.Save();
+
+        var restarted = LinuxConfig.LoadWithClientConfig(bootstrapPath, yamlPath, persist: true, out error);
+        Assert.Null(error);
+        Assert.Equal("https://agent.synced.local", restarted.PrimaryEndpoint);
+        Assert.Equal(90, restarted.HeartbeatIntervalSeconds);
+        Directory.Delete(dir, recursive: true);
+    }
 }
