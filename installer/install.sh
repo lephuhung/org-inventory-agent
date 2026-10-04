@@ -290,18 +290,45 @@ if [[ ! -f "$NEW_BIN" ]]; then
     exit 1
 fi
 
-if [[ -f "$STAGE/OrgInventoryAgent.sha256" ]]; then
-    EXPECTED="$(awk '{print $1}' "$STAGE/OrgInventoryAgent.sha256")"
-    ACTUAL="$(sha256sum "$NEW_BIN" | awk '{print $1}')"
-    if [[ "$EXPECTED" != "$ACTUAL" ]]; then
-        echo "apply-update: SHA256 mismatch ($EXPECTED != $ACTUAL) — hủy." >&2
-        rm -rf "$STAGE"
-        exit 1
-    fi
+# Fail-closed: thiếu/không parse được .sha256 thì KHÔNG install binary chưa
+# kiểm chứng vào /opt (staging dir agent ghi được).
+SHA_FILE="$STAGE/OrgInventoryAgent.sha256"
+EXPECTED=""
+if [[ -f "$SHA_FILE" ]]; then
+    EXPECTED="$(awk 'NF{print $1; exit}' "$SHA_FILE" 2>/dev/null || true)"
+fi
+if [[ ! "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    echo "apply-update: thiếu hoặc sai định dạng $SHA_FILE — hủy (fail-closed)." >&2
+    rm -rf "$STAGE"
+    exit 1
+fi
+ACTUAL="$(sha256sum "$NEW_BIN" | awk '{print $1}')"
+if [[ "$EXPECTED" != "$ACTUAL" ]]; then
+    echo "apply-update: SHA256 mismatch ($EXPECTED != $ACTUAL) — hủy." >&2
+    rm -rf "$STAGE"
+    exit 1
 fi
 
+# Thay binary atomic: copy temp cùng filesystem rồi mv — đầy disk/lỗi giữa
+# chừng không brick agent.
+TMP_BIN="$(mktemp "$BIN_DIR/.OrgInventoryAgent.XXXXXX")" || {
+    echo "apply-update: không tạo được temp trong $BIN_DIR — hủy." >&2
+    exit 1
+}
+if ! cp "$NEW_BIN" "$TMP_BIN"; then
+    echo "apply-update: copy binary thất bại (đầy disk?) — hủy, giữ bản cũ." >&2
+    rm -f "$TMP_BIN"
+    exit 1
+fi
+chmod 0755 "$TMP_BIN" || true
+
 systemctl stop "$SERVICE" 2>/dev/null || true
-install -m 0755 "$NEW_BIN" "$BIN"
+if ! mv -f "$TMP_BIN" "$BIN"; then
+    echo "apply-update: không thay được $BIN — hủy, khôi phục service bản cũ." >&2
+    rm -f "$TMP_BIN"
+    systemctl start "$SERVICE" 2>/dev/null || true
+    exit 1
+fi
 if [[ -f "$STAGE/OrgInventoryAgent.version" ]]; then
     install -m 0644 "$STAGE/OrgInventoryAgent.version" "$BIN_DIR/VERSION"
 elif [[ -n "$NEW_VER" ]]; then

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -53,7 +54,13 @@ public sealed class UpdateService : BackgroundService
         _config = config;
         _state = state;
         _logger = logger;
-        _http = new HttpClient();
+        var handler = new HttpClientHandler();
+        if (!string.IsNullOrWhiteSpace(config.HttpProxy))
+        {
+            handler.Proxy = new WebProxy(config.HttpProxy);
+            handler.UseProxy = true;
+        }
+        _http = new HttpClient(handler);
         _http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("OrgInventoryAgent", CurrentVersion));
     }
