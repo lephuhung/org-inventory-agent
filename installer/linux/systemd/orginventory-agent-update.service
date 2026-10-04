@@ -1,0 +1,8 @@
+[Unit]
+Description=Apply staged OrgInventory Agent update
+# Kích hoạt bởi orginventory-agent-update.path khi agent stage xong binary mới
+# trong /var/lib/orginventory/update/. Chạy bằng root để ghi /opt + restart service.
+
+[Service]
+Type=oneshot
+ExecStart=/opt/orginventory/apply-update.sh

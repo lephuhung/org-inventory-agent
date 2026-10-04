@@ -40,6 +40,8 @@ public class Program
                   --inventory-seconds <n>  Chu kỳ inventory (giây, test)
                   --once                   Enroll (nếu cần) → inventory 1 lần rồi exit
                   --send-inventory         Gửi inventory 1 lần rồi exit (tương đương --once)
+                  --check-update           Kiểm tra phiên bản mới trên release (không tải) rồi exit
+                  --update-now             Kiểm tra, tải và áp dụng bản mới ngay rồi exit
                   --print-config           In cấu hình hiện tại
                   --print-inventory        In payload inventory v4 đầy đủ
                   --print-security         In security posture
@@ -100,6 +102,9 @@ public class Program
         if (cli.InventorySeconds.HasValue) config.InventoryIntervalSeconds = cli.InventorySeconds.Value;
         if (!string.IsNullOrWhiteSpace(cli.EnrollToken)) { config.Token = cli.EnrollToken; LinuxConfig.Save(config, cli.ConfigPath); }
 
+        if (cli.CheckUpdate || cli.UpdateNow)
+            return await RunUpdateCheckAsync(config, cli.UpdateNow);
+
         if (cli.Once || cli.SendInventory)
             return await RunOnceAsync(config, cli);
 
@@ -148,10 +153,40 @@ public class Program
         builder.Services.AddSingleton<InventoryService>();
         builder.Services.AddSingleton<RenewService>();
         builder.Services.AddSingleton<ConfigSyncService>();
+        builder.Services.AddSingleton<UpdateService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
         builder.Services.AddHostedService(sp => sp.GetRequiredService<InventoryService>());
         builder.Services.AddHostedService(sp => sp.GetRequiredService<RenewService>());
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigSyncService>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
+    }
+
+    // ── --check-update / --update-now ──────────────────────────────
+    private static async Task<int> RunUpdateCheckAsync(AgentConfig config, bool apply)
+    {
+        using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+        var svc = new UpdateService(config, AgentState.Load(), loggerFactory.CreateLogger<UpdateService>());
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+
+        if (!apply)
+        {
+            var r = await svc.CheckAsync(cts.Token);
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                current_version = r.CurrentVersion,
+                latest_version = r.LatestVersion,
+                update_available = r.UpdateAvailable,
+                pending_version = r.PendingVersion,
+                error = r.Error,
+            }, new JsonSerializerOptions { WriteIndented = true }));
+            return r.Error is null ? 0 : 1;
+        }
+
+        var staged = await svc.CheckAndApplyAsync(cts.Token);
+        Console.WriteLine(staged
+            ? "Đã tải và áp dụng/stage bản mới (xem log)."
+            : "Không có bản mới hoặc cập nhật thất bại (xem log).");
+        return staged ? 0 : 2;
     }
 
     // ── Once mode (smoke test install / --send-inventory) ────────

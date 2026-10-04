@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for staged OrgInventory Agent updates
+
+[Path]
+PathExists=/var/lib/orginventory/update/update.pending
+Unit=orginventory-agent-update.service
+
+[Install]
+WantedBy=multi-user.target

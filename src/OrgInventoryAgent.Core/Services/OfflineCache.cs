@@ -226,6 +226,9 @@ public sealed class AgentState
     /// nếu KHÁC → gọi ngay ConfigSyncService để refresh; nếu khớp → heartbeat bình thường.</summary>
     public string? LastAgentConfigHash { get; set; }
 
+    /// <summary>Lần cuối UpdateService kiểm tra phiên bản trên release (ISO 8601 UTC).</summary>
+    public string? LastUpdateCheckAt { get; set; }
+
     public static AgentState Load()
     {
         try

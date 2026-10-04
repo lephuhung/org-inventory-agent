@@ -16,6 +16,8 @@ internal sealed class CliArgs
     public bool PrintVersion { get; private set; }
     public bool Once { get; private set; }
     public bool SendInventory { get; private set; }
+    public bool CheckUpdate { get; private set; }
+    public bool UpdateNow { get; private set; }
     public bool ShowHelp { get; private set; }
 
     public static CliArgs Parse(string[] args)
@@ -45,6 +47,8 @@ internal sealed class CliArgs
                 case "-v": cli.PrintVersion = true; break;
                 case "--once": cli.Once = true; break;
                 case "--send-inventory": cli.SendInventory = true; break;
+                case "--check-update": cli.CheckUpdate = true; break;
+                case "--update-now": cli.UpdateNow = true; break;
                 case "--help":
                 case "-h": cli.ShowHelp = true; break;
                 default:

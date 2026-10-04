@@ -34,6 +34,17 @@ public sealed class AgentConfig
     public string? RenewAfter { get; set; } // ISO 8601 UTC — thời điểm server khuyến nghị renew
     public DateTimeOffset? LastEnrolledAt { get; set; }
 
+    // ── Auto-update (kiểm tra + tải bản mới từ GitHub Releases) ──
+    /// <summary>Bật auto-update (mặc định true). Admin tắt bằng config local.</summary>
+    public bool AutoUpdateEnabled { get; set; } = true;
+
+    /// <summary>Chu kỳ check phiên bản mới (giờ, mặc định 6; clamp 1..168).</summary>
+    public int UpdateCheckIntervalHours { get; set; } = 6;
+
+    /// <summary>Override URL manifest (mặc định agent-version.json trên GitHub Releases latest
+    /// của repo agent). Asset tải cùng thư mục với manifest.</summary>
+    public string? UpdateManifestUrl { get; set; }
+
     /// <summary>
     /// AG-P1-02: agent đã enroll trước đó nhưng cert biến mất (vd OS cài lại, store bị
     /// xóa). Phải CHỜ admin issue fresh bootstrap token trước khi re-enroll.
@@ -147,6 +158,7 @@ public sealed class AgentConfig
         if (InventoryIntervalSeconds.HasValue && InventoryIntervalSeconds.Value < 5)
             InventoryIntervalSeconds = 5;
         RenewBeforePercent = Math.Clamp(RenewBeforePercent, 1, 99);
+        UpdateCheckIntervalHours = Math.Clamp(UpdateCheckIntervalHours, 1, 24 * 7);
     }
 
     /// <summary>Endpoint chính (primary). Endpoints[0] là server ưu tiên.</summary>

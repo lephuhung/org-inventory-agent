@@ -242,6 +242,82 @@ EOF
     chown root:orginventory "$cfg"
 }
 
+# ── Auto-updater: systemd path unit + apply script (root) ────────────────
+# Agent stage update vào /var/lib/orginventory/update/ (user orginventory không
+# ghi được /opt) → marker update.pending kích hoạt apply-update.sh bằng root.
+install_updater_units() {
+    cat > /etc/systemd/system/orginventory-agent-update.service <<'EOF'
+[Unit]
+Description=Apply staged OrgInventory Agent update
+
+[Service]
+Type=oneshot
+ExecStart=/opt/orginventory/apply-update.sh
+EOF
+    cat > /etc/systemd/system/orginventory-agent-update.path <<'EOF'
+[Unit]
+Description=Watch for staged OrgInventory Agent updates
+
+[Path]
+PathExists=/var/lib/orginventory/update/update.pending
+Unit=orginventory-agent-update.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    cat > /opt/orginventory/apply-update.sh <<'APPLYEOF'
+#!/bin/bash
+# apply-update.sh — áp dụng bản cập nhật agent đã stage (xem repo: installer/linux/apply-update.sh)
+set -u
+DATA_DIR="/var/lib/orginventory"
+STAGE="$DATA_DIR/update"
+PENDING="$STAGE/update.pending"
+BIN_DIR="/opt/orginventory"
+BIN="$BIN_DIR/OrgInventoryAgent"
+SERVICE="orginventory-agent.service"
+
+if [[ ! -f "$PENDING" && $# -lt 1 ]]; then
+    echo "apply-update: không có update pending." >&2
+    exit 0
+fi
+
+NEW_VER="$(head -n1 "$PENDING" 2>/dev/null || true)"
+rm -f "$PENDING"
+
+NEW_BIN="$STAGE/OrgInventoryAgent"
+if [[ ! -f "$NEW_BIN" ]]; then
+    echo "apply-update: thiếu binary staged ($NEW_BIN) — hủy." >&2
+    exit 1
+fi
+
+if [[ -f "$STAGE/OrgInventoryAgent.sha256" ]]; then
+    EXPECTED="$(awk '{print $1}' "$STAGE/OrgInventoryAgent.sha256")"
+    ACTUAL="$(sha256sum "$NEW_BIN" | awk '{print $1}')"
+    if [[ "$EXPECTED" != "$ACTUAL" ]]; then
+        echo "apply-update: SHA256 mismatch ($EXPECTED != $ACTUAL) — hủy." >&2
+        rm -rf "$STAGE"
+        exit 1
+    fi
+fi
+
+systemctl stop "$SERVICE" 2>/dev/null || true
+install -m 0755 "$NEW_BIN" "$BIN"
+if [[ -f "$STAGE/OrgInventoryAgent.version" ]]; then
+    install -m 0644 "$STAGE/OrgInventoryAgent.version" "$BIN_DIR/VERSION"
+elif [[ -n "$NEW_VER" ]]; then
+    printf '%s\n' "$NEW_VER" > "$BIN_DIR/VERSION"
+    chmod 0644 "$BIN_DIR/VERSION"
+fi
+rm -rf "$STAGE"
+systemctl start "$SERVICE"
+echo "apply-update: đã nâng cấp OrgInventoryAgent lên ${NEW_VER:-unknown}."
+APPLYEOF
+    chmod 0755 /opt/orginventory/apply-update.sh
+    systemctl daemon-reload
+    systemctl enable --now orginventory-agent-update.path 2>/dev/null || true
+    log_ok "Đã cài auto-updater (systemd path unit)"
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # PHẦN A — ORGINVENTORY AGENT
 # ══════════════════════════════════════════════════════════════════════════
@@ -335,6 +411,8 @@ EOF
     systemctl enable orginventory-agent.service 2>/dev/null || true
     log_ok "Đã cài systemd unit"
 
+    install_updater_units
+
     # ── Ghi config (merge vẫn an toàn nếu config cũ tồn tại — giữ identity) ──
     AGENT_SERVER_URL="$AGENT_SERVER_URL" ENROLL_TOKEN="$TOKEN" REENROLL="$REENROLL" merge_oi_config
     log_ok "Đã ghi $BOOT_CFG"
@@ -359,6 +437,8 @@ else
     fi
     log_step "[CÀI LẠI] OrgInventory đã cài (binary mới nhất) → merge config + restart (KHÔNG tải binary)."
     AGENT_SERVER_URL="$AGENT_SERVER_URL" ENROLL_TOKEN="$TOKEN" REENROLL="$REENROLL" merge_oi_config
+    # Máy cài từ bản cũ chưa có updater units → cài bổ sung (idempotent).
+    install_updater_units
     systemctl daemon-reload
     systemctl restart orginventory-agent.service 2>/dev/null || true
     sleep 2
