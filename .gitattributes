@@ -1,0 +1,13 @@
+# Không để CRLF vào file shell/systemd — script CRLF fail exec
+# (status=203/EXEC "No such file or directory" do shebang #!/bin/bash\r).
+*.sh       text eol=lf
+*.service  text eol=lf
+*.path     text eol=lf
+*.timer    text eol=lf
+*.spec     text eol=lf
+*.desktop  text eol=lf
+postinst   text eol=lf
+prerm      text eol=lf
+postrm     text eol=lf
+preinst    text eol=lf
+control    text eol=lf

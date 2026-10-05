@@ -420,6 +420,14 @@ Type=simple
 User=orginventory
 Group=orginventory
 ExecStart=/opt/orginventory/OrgInventoryAgent --data-dir /var/lib/orginventory --config /etc/orginventory/config.json
+# WorkingDirectory=/var/lib/orginventory: content-root (.NET) = CWD — nếu để
+# mặc định "/" sẽ duyệt đệ quy cả filesystem mỗi lần start (chậm + tốn CPU).
+WorkingDirectory=/var/lib/orginventory
+# RuntimeDirectory=orginventory: tự tạo /run/orginventory mỗi boot — /run là
+# tmpfs, mkdir trong postinst chỉ tồn tại tới reboot → sau đó ReadWritePaths
+# fail (status=226/NAMESPACE) nếu thiếu directive này.
+RuntimeDirectory=orginventory
+RuntimeDirectoryMode=0750
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=yes
