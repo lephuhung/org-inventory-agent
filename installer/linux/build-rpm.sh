@@ -36,7 +36,12 @@ dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.
 # VERSION cạnh binary — install.sh dùng để so sánh manifest auto-upgrade
 printf '%s\n' "$VERSION" > "$BUILDDIR/orginventory/opt/orginventory/VERSION"
 
-cp "$HERE/systemd/orginventory-agent.service" "$BUILDDIR/orginventory/systemd/"
+cp "$HERE"/systemd/orginventory-agent*.service "$HERE"/systemd/orginventory-agent*.path \
+    "$BUILDDIR/orginventory/systemd/"
+
+# Auto-updater helper (path unit → apply-update.sh, chạy bằng root)
+cp "$HERE/apply-update.sh" "$BUILDDIR/orginventory/opt/orginventory/"
+chmod 0755 "$BUILDDIR/orginventory/opt/orginventory/apply-update.sh"
 
 rpmbuild --define "_topdir $OUT/rpm" --define "_builddir $BUILDDIR" \
   --target "$RPM_ARCH" \

@@ -41,6 +41,9 @@
 - **mTLS**: client cert (CN=`machine-<uuid>`) cài vào Windows Certificate Store
   (LocalMachine\My, fallback CurrentUser\My); **private key không bao giờ rời máy**.
   Trên Linux dev: PEM file trong data dir.
+- **Auto-update**: mỗi 6h kiểm tra `agent-version.json` trên GitHub Releases latest → tải asset,
+  verify SHA-256 bắt buộc rồi tự nâng cấp (Windows: msiexec /qn; Linux: systemd path unit +
+  apply-update.sh chạy root). Tắt bằng `autoUpdateEnabled=false` trong config.
 - **Offline cache**: SQLite `cache.db` — gửi thất bại → lưu; flush khi có mạng (giữ nguyên body),
   dedupe theo (url, body_hash), cap 10 lần thử, tự động dọn dẹp bản ghi cũ > 7 ngày.
 - **Failover endpoint**: primary lỗi 5 lần liên tiếp → backup; thử lại primary mỗi 10 chu kỳ.
@@ -225,4 +228,37 @@ irm https://github.com/<org>/org-inventory-agent/releases/latest/download/instal
 
 # Windows air-gap: tải offline package từ portal (install-offline.cmd + MSI + server_public_key.pem)
 # rồi copy qua USB — xem docs/OFFLINE_AGENT_SPEC.md
+```
+
+## Tự động cập nhật (Auto-update)
+
+Agent định kỳ (mặc định **6 giờ**, jitter ±25%) tải `agent-version.json` trên GitHub
+Releases `latest` và so sánh semver với bản đang chạy. Có bản mới → tải asset tương
+ứng, **bắt buộc verify SHA-256**, rồi áp dụng:
+
+- **Windows**: tải `OrgInventoryAgent.msi` về `%ProgramData%\OrgInventory\update\`
+  → chạy `msiexec /i /qn` tách biệt — MSI (MajorUpgrade + ServiceControl) tự stop
+  service, thay file và start lại. Log cài tại `update\msi-install.log`.
+- **Linux**: tải `OrgInventoryAgent-<rid>` về `/var/lib/orginventory/update/` rồi ghi
+  marker `update.pending`. Systemd **path unit** `orginventory-agent-update.path`
+  (được cài kèm bởi install.sh/.deb/.rpm) kích hoạt `orginventory-agent-update.service`
+  → `/opt/orginventory/apply-update.sh` chạy bằng root: re-verify SHA-256 → stop
+  service → thay binary → ghi `VERSION` → start lại. Cài từ bản cũ chưa có unit thì
+  update chỉ stage sẵn + cảnh báo — chạy lại install script để bật auto-apply.
+
+Cấu hình trong `config.json` (không bắt buộc):
+
+```json
+{
+  "autoUpdateEnabled": true,            // false để tắt auto-update
+  "updateCheckIntervalHours": 6,        // 1..168
+  "updateManifestUrl": "https://github.com/lephuhung/org-inventory-agent/releases/latest/download/agent-version.json"
+}
+```
+
+Kiểm tra/áp dụng thủ công:
+
+```bash
+OrgInventoryAgent --check-update   # in JSON current/latest/pending, không tải
+sudo OrgInventoryAgent --update-now  # tải + áp dụng ngay nếu có bản mới
 ```

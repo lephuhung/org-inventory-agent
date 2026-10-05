@@ -111,11 +111,17 @@ internal static class Program
                 cert_store_location = config.CertStoreLocation,
                 renew_after = config.RenewAfter,
                 http_proxy = config.HttpProxy,
+                auto_update_enabled = config.AutoUpdateEnabled,
+                update_check_interval_hours = config.UpdateCheckIntervalHours,
+                update_manifest_url = config.UpdateManifestUrl,
                 config_version = config.ConfigVersion,
             };
             Console.WriteLine(JsonSerializer.Serialize(masked, new JsonSerializerOptions { WriteIndented = true }));
             return 0;
         }
+
+        if (cli.CheckUpdate || cli.UpdateNow)
+            return await RunUpdateCheckAsync(config, cli.UpdateNow);
 
         if (!string.IsNullOrWhiteSpace(cli.ExportBundlePath))
         {
@@ -170,6 +176,34 @@ internal static class Program
 
         await host.RunAsync();
         return 0;
+    }
+
+    // ── Chế độ --check-update / --update-now ─────────────────────────
+    private static async Task<int> RunUpdateCheckAsync(AgentConfig config, bool apply)
+    {
+        using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+        var svc = new UpdateService(config, AgentState.Load(), loggerFactory.CreateLogger<UpdateService>());
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+
+        if (!apply)
+        {
+            var r = await svc.CheckAsync(cts.Token);
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                current_version = r.CurrentVersion,
+                latest_version = r.LatestVersion,
+                update_available = r.UpdateAvailable,
+                pending_version = r.PendingVersion,
+                error = r.Error,
+            }, new JsonSerializerOptions { WriteIndented = true }));
+            return r.Error is null ? 0 : 1;
+        }
+
+        var staged = await svc.CheckAndApplyAsync(cts.Token);
+        Console.WriteLine(staged
+            ? "Đã tải và áp dụng/stage bản mới (xem log)."
+            : "Không có bản mới hoặc cập nhật thất bại (xem log).");
+        return staged ? 0 : 2;
     }
 
     // ── Chế độ --once (test/CI trên Linux) ─────────────────────────
@@ -251,6 +285,7 @@ internal static class Program
         builder.Services.AddSingleton<InventoryService>();
         builder.Services.AddSingleton<RenewService>();
         builder.Services.AddSingleton<ConfigSyncService>();
+        builder.Services.AddSingleton<UpdateService>();
 
         if (hosted)
         {
@@ -258,6 +293,7 @@ internal static class Program
             builder.Services.AddHostedService(sp => sp.GetRequiredService<InventoryService>());
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RenewService>());
             builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigSyncService>());
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
         }
     }
 
@@ -295,6 +331,8 @@ internal static class Program
               --org-id <guid>         Mã tổ chức gán cho máy cách ly khi export-bundle.
               --about / --info        In thông tin chi tiết về đơn vị phát triển, mục đích và tính năng.
               --version / -v          In phiên bản và đơn vị phát triển.
+              --check-update          Kiểm tra phiên bản mới trên release (không tải) rồi thoát.
+              --update-now            Kiểm tra, tải và áp dụng bản mới ngay rồi thoát.
               --once                  Chạy 1 lần: enroll → heartbeat → inventory rồi thoát (test/CI).
               --help / -h             Hướng dẫn này.
 
@@ -354,6 +392,8 @@ internal sealed class CliArgs
     public bool PrintAbout { get; private set; }
     public bool PrintVersion { get; private set; }
     public bool Once { get; private set; }
+    public bool CheckUpdate { get; private set; }
+    public bool UpdateNow { get; private set; }
     public bool ShowHelp { get; private set; }
 
     public static CliArgs Parse(string[] args)
@@ -389,6 +429,8 @@ internal sealed class CliArgs
                     cli.PrintVersion = true;
                     break;
                 case "--once": cli.Once = true; break;
+                case "--check-update": cli.CheckUpdate = true; break;
+                case "--update-now": cli.UpdateNow = true; break;
                 case "--help":
                 case "-h":
                     cli.ShowHelp = true;

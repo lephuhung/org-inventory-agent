@@ -35,7 +35,12 @@ dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.
 # Ghi VERSION cạnh binary — install.sh dùng để so sánh manifest auto-upgrade
 printf '%s\n' "$VERSION" > "$PKGROOT/opt/orginventory/VERSION"
 
-cp "$HERE/systemd/orginventory-agent.service" "$PKGROOT/lib/systemd/system/"
+cp "$HERE"/systemd/orginventory-agent*.service "$HERE"/systemd/orginventory-agent*.path \
+    "$PKGROOT/lib/systemd/system/"
+
+# Auto-updater helper (path unit → apply-update.sh, chạy bằng root)
+cp "$HERE/apply-update.sh" "$PKGROOT/opt/orginventory/"
+chmod 0755 "$PKGROOT/opt/orginventory/apply-update.sh"
 
 # Control được sinh theo RID — template giữ Architecture: amd64 làm mặc định
 sed "s/^Architecture:.*/Architecture: ${DEB_ARCH}/" "$HERE/debian/control" > "$PKGROOT/DEBIAN/control"

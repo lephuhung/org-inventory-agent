@@ -18,6 +18,8 @@ an toàn thông tin ở chế độ chỉ đọc (read-only). Bảo mật mTLS E
 mkdir -p %{buildroot}/opt/orginventory %{buildroot}/etc/orginventory %{buildroot}%{_unitdir}
 cp -r %{_builddir}/orginventory/opt/* %{buildroot}/opt/
 install -m 0644 %{_builddir}/orginventory/systemd/orginventory-agent.service %{buildroot}%{_unitdir}/
+install -m 0644 %{_builddir}/orginventory/systemd/orginventory-agent-update.service %{buildroot}%{_unitdir}/
+install -m 0644 %{_builddir}/orginventory/systemd/orginventory-agent-update.path %{buildroot}%{_unitdir}/
 
 %pre
 getent group orginventory >/dev/null || groupadd -r orginventory
@@ -29,6 +31,9 @@ mkdir -p /var/lib/orginventory /var/log/orginventory /run/orginventory
 chown -R orginventory:orginventory /var/lib/orginventory /var/log/orginventory /run/orginventory
 chmod 0750 /var/lib/orginventory /var/log/orginventory /run/orginventory
 systemctl daemon-reload || true
+# Auto-updater: path unit watch marker agent stage → apply-update.sh (root).
+systemctl enable orginventory-agent-update.path >/dev/null 2>&1 || true
+systemctl start orginventory-agent-update.path >/dev/null 2>&1 || true
 # KHÔNG auto-enable/start — service cần enroll token trước (khớp debian/postinst)
 
 %preun
@@ -41,6 +46,8 @@ systemctl daemon-reload || true
 /opt/orginventory
 %config /etc/orginventory
 %{_unitdir}/orginventory-agent.service
+%{_unitdir}/orginventory-agent-update.service
+%{_unitdir}/orginventory-agent-update.path
 
 %changelog
 * Sun Aug 30 2026 OrgInventory Team <team@example.gov.vn> - 1.1.0-1

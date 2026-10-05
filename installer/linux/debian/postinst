@@ -11,6 +11,9 @@ chown -R orginventory:orginventory /var/lib/orginventory /var/log/orginventory /
 chmod 0750 /var/lib/orginventory /var/log/orginventory /run/orginventory
 chmod 0755 /etc/orginventory
 systemctl daemon-reload
+# Auto-updater: path unit watch marker agent stage → apply-update.sh (root).
+systemctl enable orginventory-agent-update.path 2>/dev/null || true
+systemctl start orginventory-agent-update.path 2>/dev/null || true
 # Service chính KHÔNG start tự động — cần enroll trước qua token.
 #DEBHELPER#
 exit 0

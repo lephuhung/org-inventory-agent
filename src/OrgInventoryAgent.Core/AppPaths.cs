@@ -16,6 +16,9 @@ public static class AppPaths
     public static string CacheDbFile => Path.Combine(DataDir, "cache.db");
     public static string LogsDir => Path.Combine(DataDir, "logs");
 
+    /// <summary>Staging dir cho auto-update (binary/MSI đã verify + marker update.pending).</summary>
+    public static string UpdateDir => Path.Combine(DataDir, "update");
+
     /// <summary>Linux dev only: cert + private key dạng PEM file (Windows dùng Certificate Store).</summary>
     public static string CertFile => Path.Combine(DataDir, "client-cert.pem");
     public static string KeyFile => Path.Combine(DataDir, "client-key.pem");
