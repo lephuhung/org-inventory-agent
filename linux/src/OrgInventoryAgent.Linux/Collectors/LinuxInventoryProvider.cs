@@ -29,7 +29,7 @@ public sealed class LinuxInventoryProvider : IInventoryProvider
             Agent = new AgentMetadata
             {
                 Name = AppInfo.Name,
-                Version = AppInfo.Version,
+                Version = Core.AppInfo.EffectiveVersion,
                 Runtime = ".NET 8.0",
                 Platform = "linux",
                 Architecture = arch,

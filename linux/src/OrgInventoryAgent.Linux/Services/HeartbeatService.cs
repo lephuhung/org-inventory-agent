@@ -102,6 +102,9 @@ public sealed class HeartbeatService : BackgroundService
             logged_user = Environment.UserName,
             uptime_sec = (long)(Environment.TickCount64 / 1000),
             ip = LinuxPrimaryIp.Get(),
+            // Contract: optional field — server bỏ qua nếu format sai, agent cũ không
+            // gửi vẫn chạy. Cùng giá trị với agent.version trong inventory.
+            agent_version = Core.AppInfo.EffectiveVersion,
         };
         try
         {
