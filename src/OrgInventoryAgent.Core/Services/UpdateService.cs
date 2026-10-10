@@ -40,9 +40,7 @@ public sealed class UpdateService : BackgroundService
     /// <summary>Version đang chạy — lấy từ entry assembly (exe), KHÔNG phải Core.dll
     /// (release pipeline chỉ pin version vào csproj exe; Core luôn mang version gốc).
     /// So sánh sai ở đây sẽ khiến agent tải cập nhật lặp vô hạn.</summary>
-    public static string CurrentVersion =>
-        System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3)
-        ?? AppInfo.Version;
+    public static string CurrentVersion => AppInfo.EffectiveVersion;
 
     private readonly AgentConfig _config;
     private readonly AgentState _state;

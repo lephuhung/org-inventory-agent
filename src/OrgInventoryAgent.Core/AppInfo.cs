@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace OrgInventoryAgent.Core;
 
 /// <summary>
@@ -8,6 +10,15 @@ public static class AppInfo
 {
     public static readonly string Version =
         typeof(AppInfo).Assembly.GetName().Version?.ToString(3) ?? "1.1.0";
+
+    /// <summary>Version của exe đang chạy (entry assembly) — dùng cho mọi chỗ
+    /// báo version lên backend (agent.version, heartbeat agent_version) và so
+    /// version trong UpdateService. Release pipeline chỉ pin version vào csproj
+    /// exe, nên đọc Core.dll (Version ở trên) sẽ báo sai. Fallback về Version
+    /// của Core khi không có entry assembly (vd: chạy trong test host).
+    /// </summary>
+    public static readonly string EffectiveVersion =
+        Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? Version;
 
     public const string Name = "OrgInventory Agent";
     public const string FullTitle = "Hệ thống Quản lý Tài sản Công nghệ Thông tin & Đánh giá An toàn Thông tin";

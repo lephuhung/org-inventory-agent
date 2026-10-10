@@ -47,7 +47,7 @@ public sealed class InventoryCollector : IInventoryProvider
             Agent = new AgentMetadata
             {
                 Name = AppInfo.Name,
-                Version = AppInfo.Version,
+                Version = AppInfo.EffectiveVersion,
                 Runtime = ".NET 8.0",
                 Platform = "windows",
                 Architecture = arch,
