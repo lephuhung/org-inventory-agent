@@ -411,12 +411,30 @@ public sealed class UpdateService : BackgroundService
 
     // ── Platform target ───────────────────────────────────────────────
 
-    /// <summary>RID dùng để tra manifest (win-x64 / linux-x64 / linux-arm64).</summary>
+    /// <summary>RID dùng để tra manifest (win-x64 / linux-x64 / linux-arm64 /
+    /// linux-musl-* / osx-x64 / osx-arm64).</summary>
     public static string CurrentRid()
     {
         if (OperatingSystem.IsWindows())
             return RuntimeInformation.OSArchitecture == Architecture.X86 ? "win-x86" : "win-x64";
-        return RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "linux-arm64" : "linux-x64";
+        if (OperatingSystem.IsMacOS())
+            return RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
+        var musl = IsMusl() ? "-musl" : "";
+        return RuntimeInformation.OSArchitecture == Architecture.Arm64
+            ? $"linux{musl}-arm64"
+            : $"linux{musl}-x64";
+    }
+
+    /// <summary>Alpine/musl distro: glibc binary không chạy → phải tải bản musl.
+    /// Phát hiện qua dynamic loader ld-musl-*.so.1 (không có trên glibc).</summary>
+    private static bool IsMusl()
+    {
+        try
+        {
+            return Directory.GetFiles("/lib", "ld-musl-*.so.1").Length > 0
+                || Directory.GetFiles("/usr/lib", "ld-musl-*.so.1").Length > 0;
+        }
+        catch { return false; }
     }
 }
 
@@ -437,8 +455,10 @@ public static class UpdateManifest
             if (rid.StartsWith("win", StringComparison.Ordinal))
                 return obj["msi_version"]?.GetValue<string>();
 
-            var linux = obj["linux"] as JsonObject;
-            return linux?[rid]?.GetValue<string>();
+            // macOS tra section "osx", Linux (glibc + musl) tra section "linux".
+            var section = rid.StartsWith("osx", StringComparison.Ordinal) ? "osx" : "linux";
+            var entries = obj[section] as JsonObject;
+            return entries?[rid]?.GetValue<string>();
         }
         catch (Exception)
         {

@@ -1,9 +1,9 @@
 using System.Net.NetworkInformation;
 
-namespace OrgInventoryAgent.Linux.Collectors;
+namespace OrgInventoryAgent.Core.Collectors;
 
 /// <summary>Lấy IP đầu tiên của interface up (không phải loopback) — cho heartbeat payload.</summary>
-public static class LinuxPrimaryIp
+public static class PosixPrimaryIp
 {
     public static string Get()
     {

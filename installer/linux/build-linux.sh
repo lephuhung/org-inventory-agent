@@ -4,7 +4,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 DIST="${1:-dist}"
 mkdir -p "$DIST"
 
-for RID in linux-x64 linux-arm64; do
+for RID in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64; do
     dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
       -c Release -r "$RID" --self-contained true \
       -p:PublishSingleFile=true \

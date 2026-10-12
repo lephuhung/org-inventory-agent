@@ -3,7 +3,6 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrgInventoryAgent.Core.Crypto;
 using OrgInventoryAgent.Core;
-using OrgInventoryAgent.Linux.Crypto;
 using Xunit;
 
 namespace OrgInventoryAgent.Linux.Tests;
@@ -11,7 +10,7 @@ namespace OrgInventoryAgent.Linux.Tests;
 /// <summary>
 /// Kiểm tra chuyên sâu tính năng mã hóa mTLS và quản lý chứng chỉ / khóa bí mật (Linux PEM file):
 /// 1. CsrGenerator sinh cặp khóa ECDSA P-256 chuẩn NIST và CSR PKCS#10.
-/// 2. KeyStore cài đặt chứng chỉ kèm khóa bí mật (Private Key không bao giờ bị mất hoặc lộ).
+/// 2. PemFileKeyStore cài đặt chứng chỉ kèm khóa bí mật (Private Key không bao giờ bị mất hoặc lộ).
 /// 3. Thay thế chứng chỉ khi renew (ReplaceCertificate).
 /// 4. Đảm bảo chứng chỉ mTLS có đầy đủ Private Key để thực hiện TLS Client Authentication.
 /// </summary>
@@ -19,7 +18,7 @@ public class MtlsAndKeyStoreTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly AgentConfig _config;
-    private readonly KeyStore _keyStore;
+    private readonly PemFileKeyStore _keyStore;
 
     public MtlsAndKeyStoreTests()
     {
@@ -27,7 +26,7 @@ public class MtlsAndKeyStoreTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         AppPaths.Initialize(_tempDir);
         _config = new AgentConfig();
-        _keyStore = new KeyStore(NullLogger<KeyStore>.Instance);
+        _keyStore = new PemFileKeyStore(NullLogger<PemFileKeyStore>.Instance);
     }
 
     public void Dispose()

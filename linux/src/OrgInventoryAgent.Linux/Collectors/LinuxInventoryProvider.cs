@@ -13,7 +13,7 @@ namespace OrgInventoryAgent.Linux.Collectors;
 /// Hardware/software fields live in <see cref="InventorySnapshot"/> (flat schema) —
 /// exposed via <see cref="CollectSnapshot"/> for callers that still need the flat shape.
 /// </summary>
-public sealed class LinuxInventoryProvider : IInventoryProvider
+public sealed class LinuxInventoryProvider : IPosixInventoryProvider
 {
     private readonly ILogger<LinuxInventoryProvider> _logger;
 
@@ -56,7 +56,7 @@ public sealed class LinuxInventoryProvider : IInventoryProvider
             Gpu = LinuxOsCollector.GetGpuModel() is { } gpu ? new GpuInfo { Model = gpu } : null,
             Mainboard = LinuxOsCollector.GetMainboard(),
             Bios = LinuxOsCollector.GetBios(),
-            Network = LinuxNetworkCollector.Collect(),
+            Network = PosixNetworkCollector.Collect(),
             LoggedUser = LinuxOsCollector.GetLoggedUser(),
             InstalledSoftware = LinuxSoftwareCollector.Collect(_logger),
             Security = LinuxSecurityCollector.Collect(_logger),

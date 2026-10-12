@@ -102,8 +102,25 @@ esac
 case "${ID:-}" in
     ubuntu|debian) PKG_EXT="deb" ;;
     rhel|rocky|almalinux|centos|fedora) PKG_EXT="rpm" ;;
+    alpine)
+        # Alpine = musl libc → glibc binary không chạy; không có systemd.
+        # Gói .apk (OpenRC) là đường cài chính thức — script này chỉ systemd.
+        log_fail "Alpine Linux: dùng gói .apk — tải tại ${PORTAL_URL}/download/agent-linux-musl-* (xem release notes). Script này chỉ hỗ trợ distro có systemd."
+        ;;
+    arch|manjaro)
+        # Arch: cài binary trực tiếp (systemd) hoặc dùng gói .pkg.tar.zst.
+        PKG_EXT="bin" ;;
     *) PKG_EXT="bin" ;;
 esac
+
+# musl libc (Alpine/bản musl khác) → đổi RID sang linux-musl-*.
+# ld-musl-*.so.1 chỉ tồn tại trên musl; glibc dùng ld-linux-*.so.2.
+if ls /lib/ld-musl-*.so.1 >/dev/null 2>&1 || ls /usr/lib/ld-musl-*.so.1 >/dev/null 2>&1; then
+    case "$RID" in
+        linux-x64)   RID="linux-musl-x64" ;;
+        linux-arm64) RID="linux-musl-arm64" ;;
+    esac
+fi
 
 # ── 4. Manifest phiên bản từ server ──────────────────────────────────────
 # JSON nhỏ: {"msi_version": "...", "linux": {"linux-x64": "1.1.0", "linux-arm64": "1.1.0"}}

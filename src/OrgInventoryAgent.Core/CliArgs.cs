@@ -1,7 +1,7 @@
-namespace OrgInventoryAgent.Linux;
+namespace OrgInventoryAgent.Core;
 
 /// <summary>Parse CLI args đơn giản (--key value / --flag).</summary>
-internal sealed class CliArgs
+public sealed class CliArgs
 {
     public string? DataDir { get; private set; }
     public string? ConfigPath { get; private set; }

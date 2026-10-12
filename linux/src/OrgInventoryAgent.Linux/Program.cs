@@ -6,9 +6,8 @@ using OrgInventoryAgent.Core.Crypto;
 using OrgInventoryAgent.Core.Logging;
 using OrgInventoryAgent.Core.Net;
 using OrgInventoryAgent.Core.Services;
+using OrgInventoryAgent.Core.Collectors;
 using OrgInventoryAgent.Linux.Collectors;
-using OrgInventoryAgent.Linux.Crypto;
-using OrgInventoryAgent.Linux.Services;
 using System.Text.Json;
 
 namespace OrgInventoryAgent.Linux;
@@ -55,11 +54,11 @@ public class Program
         if (cli.PrintAbout) { Console.WriteLine(AppInfo.TransparencyAndSafetyCommitment); return 0; }
         if (cli.PrintConfig)
         {
-            var cfg = LinuxConfig.Load(cli.ConfigPath);
+            var cfg = PosixConfig.Load(cli.ConfigPath);
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 data_dir = AppPaths.DataDir,
-                config_path = cli.ConfigPath ?? LinuxConfig.DefaultConfigPath,
+                config_path = cli.ConfigPath ?? PosixConfig.DefaultConfigPath,
                 endpoints = cfg.Endpoints,
                 heartbeat_interval_seconds = cfg.HeartbeatIntervalSeconds,
                 heartbeat_jitter_seconds = cfg.HeartbeatJitterSeconds,
@@ -97,10 +96,10 @@ public class Program
             return 0;
         }
 
-        var config = LinuxConfig.Load(cli.ConfigPath);
+        var config = PosixConfig.Load(cli.ConfigPath);
         if (!string.IsNullOrWhiteSpace(cli.Endpoint)) config.SetPrimaryEndpoint(cli.Endpoint);
         if (cli.InventorySeconds.HasValue) config.InventoryIntervalSeconds = cli.InventorySeconds.Value;
-        if (!string.IsNullOrWhiteSpace(cli.EnrollToken)) { config.Token = cli.EnrollToken; LinuxConfig.Save(config, cli.ConfigPath); }
+        if (!string.IsNullOrWhiteSpace(cli.EnrollToken)) { config.Token = cli.EnrollToken; PosixConfig.Save(config, cli.ConfigPath); }
 
         if (cli.CheckUpdate || cli.UpdateNow)
             return await RunUpdateCheckAsync(config, cli.UpdateNow);
@@ -126,7 +125,7 @@ public class Program
         logger.LogInformation("================================================================================");
         logger.LogInformation("{Name} v{Version} — {FullTitle}", AppInfo.Name, AppInfo.Version, AppInfo.FullTitle);
         logger.LogInformation("Đơn vị phát triển: {Dev}", AppInfo.DeveloperShort);
-        logger.LogInformation("DataDir={Dir} Config={Cfg}", AppPaths.DataDir, cli.ConfigPath ?? LinuxConfig.DefaultConfigPath);
+        logger.LogInformation("DataDir={Dir} Config={Cfg}", AppPaths.DataDir, cli.ConfigPath ?? PosixConfig.DefaultConfigPath);
         logger.LogInformation("================================================================================");
 
         var coordinator = host.Services.GetRequiredService<EnrollCoordinator>();
@@ -140,12 +139,14 @@ public class Program
     {
         builder.Services.AddSingleton(config);
         builder.Services.AddSingleton(AgentState.Load());
-        builder.Services.AddSingleton<KeyStore>();
-        builder.Services.AddSingleton<IKeyStore>(sp => sp.GetRequiredService<KeyStore>());
+        builder.Services.AddSingleton<PemFileKeyStore>();
+        builder.Services.AddSingleton<IKeyStore>(sp => sp.GetRequiredService<PemFileKeyStore>());
         builder.Services.AddSingleton<EndpointManager>();
         builder.Services.AddSingleton<OfflineCache>();
         builder.Services.AddSingleton<LinuxFingerprintCollector>();
+        builder.Services.AddSingleton<IFingerprintCollector>(sp => sp.GetRequiredService<LinuxFingerprintCollector>());
         builder.Services.AddSingleton<LinuxInventoryProvider>();
+        builder.Services.AddSingleton<IPosixInventoryProvider>(sp => sp.GetRequiredService<LinuxInventoryProvider>());
         builder.Services.AddSingleton<ApiClient>();
         builder.Services.AddSingleton<EnrollClient>();
         builder.Services.AddSingleton<EnrollCoordinator>();
@@ -200,7 +201,7 @@ public class Program
         var logger = loggerFactory.CreateLogger("Once");
         logger.LogInformation("Chế độ --once: enroll (nếu cần) → heartbeat → inventory.");
 
-        var keyStore = new KeyStore(loggerFactory.CreateLogger<KeyStore>());
+        var keyStore = new PemFileKeyStore(loggerFactory.CreateLogger<PemFileKeyStore>());
         var endpoints = new EndpointManager(config, loggerFactory.CreateLogger<EndpointManager>());
         var api = new ApiClient(config, endpoints, keyStore, loggerFactory.CreateLogger<ApiClient>());
         var enrollClient = new EnrollClient(api, loggerFactory.CreateLogger<EnrollClient>());

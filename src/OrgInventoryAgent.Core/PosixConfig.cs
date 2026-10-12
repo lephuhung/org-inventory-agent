@@ -1,7 +1,7 @@
 using System.Text.Json;
 using OrgInventoryAgent.Core;
 
-namespace OrgInventoryAgent.Linux;
+namespace OrgInventoryAgent.Core;
 
 /// <summary>
 /// Load/save AgentConfig cho Linux.
@@ -16,7 +16,7 @@ namespace OrgInventoryAgent.Linux;
 /// (identity + intervals đã sync) — đảm bảo restart KHÔNG bị mất identity và
 /// không re-enroll tạo máy trùng / 401 token đã dùng.
 /// </summary>
-public static class LinuxConfig
+public static class PosixConfig
 {
     public const string DefaultConfigPath = "/etc/orginventory/config.json";
 

@@ -1,9 +1,9 @@
 using System.Net.NetworkInformation;
 using OrgInventoryAgent.Core.Collectors.Schema;
 
-namespace OrgInventoryAgent.Linux.Collectors;
+namespace OrgInventoryAgent.Core.Collectors;
 
-public static class LinuxNetworkCollector
+public static class PosixNetworkCollector
 {
     public static List<NetworkInterfaceInfo>? Collect()
     {

@@ -1,3 +1,4 @@
+using OrgInventoryAgent.Core;
 using Xunit;
 
 // AppPaths là global static state (Initialize ghi đè _dataDir). Các test class

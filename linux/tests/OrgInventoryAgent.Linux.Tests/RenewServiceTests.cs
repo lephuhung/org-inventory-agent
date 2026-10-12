@@ -1,6 +1,7 @@
+using OrgInventoryAgent.Core;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using OrgInventoryAgent.Linux.Services;
+using OrgInventoryAgent.Core.Services;
 using Xunit;
 
 namespace OrgInventoryAgent.Linux.Tests;

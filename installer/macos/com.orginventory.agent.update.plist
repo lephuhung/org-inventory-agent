@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.orginventory.agent.update.plist — update applier cho OrgInventory Agent.
+
+  Tương đương cặp orginventory-agent-update.{path,service} trên Linux:
+  WatchPaths theo dõi marker update.pending mà UpdateService (trong agent)
+  ghi sau khi tải + verify binary mới vào /var/db/orginventory/update/.
+  launchd chạy apply-update.sh (root) → re-verify SHA-256 → swap binary →
+  kickstart agent. Đặt tại /Library/LaunchDaemons/, root:wheel 0644.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.orginventory.agent.update</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/orginventory/apply-update.sh</string>
+    </array>
+
+    <key>WatchPaths</key>
+    <array>
+        <string>/var/db/orginventory/update/update.pending</string>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/orginventory/update.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/orginventory/update.stderr.log</string>
+</dict>
+</plist>

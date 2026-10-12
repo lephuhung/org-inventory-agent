@@ -4,7 +4,7 @@ using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Net;
 using OrgInventoryAgent.Core.Services;
 
-namespace OrgInventoryAgent.Linux.Services;
+namespace OrgInventoryAgent.Core.Services;
 
 /// <summary>Đồng bộ cấu hình từ server: GET /api/agent/config (mTLS) định kỳ mỗi 6h.</summary>
 public sealed class ConfigSyncService : BackgroundService

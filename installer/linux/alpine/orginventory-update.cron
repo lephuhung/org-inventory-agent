@@ -1,0 +1,5 @@
+#!/bin/sh
+# /etc/periodic/15min/orginventory-update — áp dụng staged update trên Alpine.
+# Alpine không có systemd path unit → cron 15 phút gọi apply-update.sh
+# (script tự thoát sớm khi không có marker update.pending).
+exec /opt/orginventory/apply-update.sh

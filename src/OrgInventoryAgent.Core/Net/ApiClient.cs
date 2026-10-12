@@ -26,7 +26,7 @@ public sealed class ApiResponse
 }
 
 /// <summary>
-/// HTTP client cho agent — mTLS (client cert từ KeyStore), User-Agent rõ ràng
+/// HTTP client cho agent — mTLS (client cert từ PemFileKeyStore), User-Agent rõ ràng
 /// OrgInventoryAgent/x.y.z, retry transient, gzip khi payload &gt; 8KB, KHÔNG bỏ qua
 /// TLS errors (verify server theo hệ thống trust).
 /// Payload flat JSON (không envelope — Phase 1, khớp server thực tế).

@@ -1,9 +1,10 @@
+using OrgInventoryAgent.Core;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrgInventoryAgent.Core.Collectors;
+using OrgInventoryAgent.Linux.Collectors;
 using OrgInventoryAgent.Core.Collectors.Schema;
 using OrgInventoryAgent.Linux;
-using OrgInventoryAgent.Linux.Collectors;
 using Xunit;
 
 namespace OrgInventoryAgent.Linux.Tests;

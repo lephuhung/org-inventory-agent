@@ -14,7 +14,7 @@ public class LinuxConfigTests
         var cfgPath = Path.Combine(dir, "config.json");
         File.WriteAllText(cfgPath, """{"endpoints":["https://agent.local"],"enroll_token":"t_abc","data_dir":"/var/lib/orginventory"}""");
 
-        var cfg = LinuxConfig.Load(cfgPath);
+        var cfg = PosixConfig.Load(cfgPath);
 
         Assert.Equal("t_abc", cfg.Token);
         Assert.Equal("https://agent.local", cfg.PrimaryEndpoint);
@@ -50,7 +50,7 @@ public class LinuxConfigTests
         }
         """);
 
-        var cfg = LinuxConfig.Load(bootstrapPath);
+        var cfg = PosixConfig.Load(bootstrapPath);
 
         Assert.True(cfg.Enrolled);
         Assert.Equal("30b056f4-bb51-4a12-90cf-3e0d7e245bd6", cfg.MachineId);
@@ -76,7 +76,7 @@ public class LinuxConfigTests
         var cfgPath = Path.Combine(dir, "config.json");
         File.WriteAllText(cfgPath, """{"endpoints":["https://agent.local"],"token":"t_old","enroll_token":"t_new"}""");
 
-        var cfg = LinuxConfig.Load(cfgPath);
+        var cfg = PosixConfig.Load(cfgPath);
 
         Assert.Equal("t_new", cfg.Token);
         Directory.Delete(dir, recursive: true);

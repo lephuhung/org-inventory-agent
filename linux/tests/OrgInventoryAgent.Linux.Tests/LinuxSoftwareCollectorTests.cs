@@ -1,4 +1,6 @@
+using OrgInventoryAgent.Core;
 using Microsoft.Extensions.Logging.Abstractions;
+using OrgInventoryAgent.Core.Collectors;
 using OrgInventoryAgent.Linux.Collectors;
 using Xunit;
 

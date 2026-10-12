@@ -1,12 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using OrgInventoryAgent.Core.Collectors;
 using OrgInventoryAgent.Core.Collectors.Schema;
 
 namespace OrgInventoryAgent.Linux.Collectors;
 
 /// <summary>Fingerprint đa nguồn trên Linux: product_uuid (sysfs), /etc/machine-id, board_serial.</summary>
-public sealed class LinuxFingerprintCollector
+public sealed class LinuxFingerprintCollector : IFingerprintCollector
 {
     private readonly ILogger<LinuxFingerprintCollector> _logger;
 
