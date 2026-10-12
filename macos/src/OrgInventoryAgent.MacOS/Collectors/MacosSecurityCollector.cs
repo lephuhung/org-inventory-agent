@@ -194,10 +194,11 @@ public static class MacosPrivilegeControlCollector
         }
         else
         {
-            var hash = MacosCmd.Run("/usr/bin/dscl", ". -read /Users/root ShadowHashData");
-            if (hash is not null)
-                // "No such key: ShadowHashData" = root chưa có password = locked.
-                status.RootAccountLocked = hash.Contains("No such key", StringComparison.OrdinalIgnoreCase);
+            // "No such key" đi qua STDERR (MacosCmd.Run chỉ đọc stdout) → đọc
+            // full record: có ShadowHashData = root có password (enabled).
+            var record = MacosCmd.Run("/usr/bin/dscl", ". -read /Users/root");
+            if (record is not null)
+                status.RootAccountLocked = !record.Contains("ShadowHashData", StringComparison.OrdinalIgnoreCase);
         }
         return status;
     }

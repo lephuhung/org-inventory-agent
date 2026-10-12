@@ -17,14 +17,31 @@ public class Program
     /// <summary>Data dir mặc định trên macOS cho system daemon.</summary>
     public const string DefaultDataDir = "/var/db/orginventory";
 
+    /// <summary>Dir tồn tại VÀ ghi được (không chỉ Exists — /var/db/orginventory
+    /// root:wheel 0750 tồn tại sau install nhưng non-root không ghi được).</summary>
+    private static bool IsWritableDir(string path)
+    {
+        try
+        {
+            if (!Directory.Exists(path)) return false;
+            var probe = Path.Combine(path, $".wtest-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return true;
+        }
+        catch { return false; }
+    }
+
     public static async Task<int> Main(string[] args)
     {
         var cli = CliArgs.Parse(args);
 
         // AppPaths phải Initialize TRƯỚC khi bất kỳ code nào dùng AppPaths.*
+        // DefaultDataDir tồn tại nhưng không ghi được (root 0750, chạy non-root)
+        // → fallback user dir thay vì crash, để lệnh --print-* vẫn chạy được.
         var dataDir = cli.DataDir
             ?? Environment.GetEnvironmentVariable("ORGINV_DATA_DIR")
-            ?? (Directory.Exists(DefaultDataDir) ? DefaultDataDir
+            ?? (IsWritableDir(DefaultDataDir) ? DefaultDataDir
                 : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "OrgInventory"));
         try { AppPaths.Initialize(dataDir); }
         catch (Exception ex) { Console.Error.WriteLine($"Không thể khởi tạo data dir '{dataDir}': {ex.Message}"); return 10; }
