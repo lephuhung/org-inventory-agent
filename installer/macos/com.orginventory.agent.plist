@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.orginventory.agent.plist — LaunchDaemon cho OrgInventory Agent (macOS).
+
+  Chạy bằng root (chuẩn agent hệ thống trên macOS — không có user service
+  riêng như systemd). WorkingDirectory = data dir để content-root (.NET)
+  không duyệt cả filesystem. KeepAlive tương đương Restart=on-failure.
+  Đặt tại /Library/LaunchDaemons/, permission root:wheel 0644.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.orginventory.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/orginventory/OrgInventoryAgent</string>
+        <string>--data-dir</string>
+        <string>/var/db/orginventory</string>
+        <string>--config</string>
+        <string>/etc/orginventory/config.json</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/var/db/orginventory</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/orginventory/agent.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/orginventory/agent.stderr.log</string>
+</dict>
+</plist>

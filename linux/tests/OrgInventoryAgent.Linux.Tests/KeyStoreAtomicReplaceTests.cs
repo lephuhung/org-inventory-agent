@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrgInventoryAgent.Linux.Crypto;
+using OrgInventoryAgent.Core.Crypto;
 using OrgInventoryAgent.Core;
 using Xunit;
 
@@ -25,14 +25,14 @@ namespace OrgInventoryAgent.Linux.Tests;
 public sealed class KeyStoreAtomicReplaceTests : IDisposable
 {
     private readonly string _tmpDir;
-    private readonly KeyStore _store;
+    private readonly PemFileKeyStore _store;
 
     public KeyStoreAtomicReplaceTests()
     {
         _tmpDir = Path.Combine(Path.GetTempPath(), "keystore-atomic-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tmpDir);
         AppPaths.Initialize(_tmpDir);
-        _store = new KeyStore(NullLogger<KeyStore>.Instance);
+        _store = new PemFileKeyStore(NullLogger<PemFileKeyStore>.Instance);
     }
 
     public void Dispose()

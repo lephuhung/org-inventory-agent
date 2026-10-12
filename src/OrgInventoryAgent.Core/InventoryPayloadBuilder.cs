@@ -1,7 +1,7 @@
 using OrgInventoryAgent.Core;
-using OrgInventoryAgent.Linux.Collectors;
+using OrgInventoryAgent.Core.Collectors;
 
-namespace OrgInventoryAgent.Linux;
+namespace OrgInventoryAgent.Core;
 
 /// <summary>
 /// Build payload inventory v4: hợp nhất flat snapshot (os_name, cpu, ram_gb, ...)
@@ -16,7 +16,7 @@ namespace OrgInventoryAgent.Linux;
 /// </summary>
 public static class InventoryPayloadBuilder
 {
-    public static object Build(LinuxInventoryProvider provider, string loggedUser)
+    public static object Build(IPosixInventoryProvider provider, string loggedUser)
     {
         var envelope = provider.Collect();
         var snapshot = provider.CollectSnapshot();

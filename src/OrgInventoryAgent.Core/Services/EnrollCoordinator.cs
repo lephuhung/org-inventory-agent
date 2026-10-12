@@ -4,10 +4,9 @@ using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Crypto;
 using OrgInventoryAgent.Core.Net;
 using OrgInventoryAgent.Core.Services;
-using OrgInventoryAgent.Linux.Collectors;
-using OrgInventoryAgent.Linux.Crypto;
+using OrgInventoryAgent.Core.Collectors;
 
-namespace OrgInventoryAgent.Linux.Services;
+namespace OrgInventoryAgent.Core.Services;
 
 /// <summary>
 /// Điều phối enrollment: token + fingerprint + CSR → server ký → cài cert PEM → lưu config.
@@ -19,8 +18,8 @@ public sealed class EnrollCoordinator
     private readonly ApiClient _api;
     private readonly EnrollClient _enrollClient;
     private readonly EndpointManager _endpoints;
-    private readonly KeyStore _keyStore;
-    private readonly LinuxFingerprintCollector _fingerprint;
+    private readonly PemFileKeyStore _keyStore;
+    private readonly IFingerprintCollector _fingerprint;
     private readonly AgentState _state;
     private readonly ILogger<EnrollCoordinator> _logger;
     private readonly object _lock = new();
@@ -28,7 +27,7 @@ public sealed class EnrollCoordinator
     private DateTimeOffset _lastAttempt = DateTimeOffset.MinValue;
 
     public EnrollCoordinator(AgentConfig config, ApiClient api, EnrollClient enrollClient,
-        EndpointManager endpoints, KeyStore keyStore, LinuxFingerprintCollector fingerprint,
+        EndpointManager endpoints, PemFileKeyStore keyStore, IFingerprintCollector fingerprint,
         AgentState state, ILogger<EnrollCoordinator> logger)
     {
         _config = config; _api = api; _enrollClient = enrollClient; _endpoints = endpoints;

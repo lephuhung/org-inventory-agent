@@ -3,9 +3,9 @@ using Microsoft.Extensions.Logging;
 using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Net;
 using OrgInventoryAgent.Core.Services;
-using OrgInventoryAgent.Linux.Collectors;
+using OrgInventoryAgent.Core.Collectors;
 
-namespace OrgInventoryAgent.Linux.Services;
+namespace OrgInventoryAgent.Core.Services;
 
 /// <summary>
 /// Gửi inventory v4 đầy đủ: lần đầu sau enroll, config_hash thay đổi, định kỳ
@@ -18,7 +18,7 @@ public sealed class InventoryService : BackgroundService
     private readonly EndpointManager _endpoints;
     private readonly EnrollCoordinator _enroll;
     private readonly OfflineCache _cache;
-    private readonly LinuxInventoryProvider _collector;
+    private readonly IPosixInventoryProvider _collector;
     private readonly ILogger<InventoryService> _logger;
     private readonly AgentState _state;
     private readonly object _sendLock = new();
@@ -26,7 +26,7 @@ public sealed class InventoryService : BackgroundService
     private bool _sending;
 
     public InventoryService(AgentConfig config, ApiClient api, EndpointManager endpoints,
-        EnrollCoordinator enroll, OfflineCache cache, LinuxInventoryProvider collector,
+        EnrollCoordinator enroll, OfflineCache cache, IPosixInventoryProvider collector,
         AgentState state, ILogger<InventoryService> logger)
     {
         _config = config; _api = api; _endpoints = endpoints; _enroll = enroll; _cache = cache;

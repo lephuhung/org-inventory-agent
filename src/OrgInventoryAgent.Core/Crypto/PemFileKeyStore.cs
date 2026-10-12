@@ -4,18 +4,18 @@ using Microsoft.Extensions.Logging;
 using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Crypto;
 
-namespace OrgInventoryAgent.Linux.Crypto;
+namespace OrgInventoryAgent.Core.Crypto;
 
 /// <summary>
-/// Linux KeyStore — lưu client cert + private key dạng PEM files tại AppPaths.CertFile/KeyFile
-/// (data dir). API mirror Windows KeyStore (config-based: thumbprint + CertStoreLocation="File")
+/// Linux PemFileKeyStore — lưu client cert + private key dạng PEM files tại AppPaths.CertFile/KeyFile
+/// (data dir). API mirror Windows PemFileKeyStore (config-based: thumbprint + CertStoreLocation="File")
 /// để EnrollCoordinator/RenewService dùng chung logic. Implement đủ IKeyStore contract.
 /// </summary>
-public sealed class KeyStore : IKeyStore
+public sealed class PemFileKeyStore : IKeyStore
 {
-    private readonly ILogger<KeyStore> _logger;
+    private readonly ILogger<PemFileKeyStore> _logger;
 
-    public KeyStore(ILogger<KeyStore> logger) => _logger = logger;
+    public PemFileKeyStore(ILogger<PemFileKeyStore> logger) => _logger = logger;
 
     public bool HasClientCertificate(AgentConfig config) =>
         FindClientCertificate(config) is not null;

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>OrgInventoryAgent.MacOS</RootNamespace>
+    <AssemblyName>OrgInventoryAgent</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+
+    <Company>Phòng An ninh mạng và phòng, chống tội phạm sử dụng công nghệ cao, Công an tỉnh Hà Tĩnh</Company>
+    <Authors>Phòng ANM &amp; PCTP sử dụng CNC, Công an tỉnh Hà Tĩnh</Authors>
+    <Product>OrgInventory Agent - Hệ thống Quản lý Tài sản CNTT &amp; ATTT</Product>
+    <AssemblyTitle>OrgInventory Agent (macOS)</AssemblyTitle>
+    <Description>Hệ thống Quản lý Tài sản Công nghệ Thông tin &amp; Đánh giá An toàn Thông tin - Phiên bản macOS (Apple Silicon + Intel) - Phát triển bởi Phòng An ninh mạng và phòng, chống tội phạm sử dụng công nghệ cao, Công an tỉnh Hà Tĩnh. Thu thập thông số phần cứng, phần mềm, kiểm tra an toàn hệ thống ở chế độ chỉ đọc (Read-only), bảo mật mTLS, zero-GUI.</Description>
+    <Copyright>Bản quyền (c) 2025-2026 Phòng An ninh mạng và PCTP sử dụng công nghệ cao, Công an tỉnh Hà Tĩnh</Copyright>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\OrgInventoryAgent.Core\OrgInventoryAgent.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Publish profile cho macOS self-contained single-file (osx-x64 + osx-arm64).
+       Giữ nguyên cấu hình bản Linux: tắt nén, bật self-extract native libs
+       (libe_sqlite3.dylib — OfflineCache cần), DebugType=none. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'osx-x64' Or '$(RuntimeIdentifier)' == 'osx-arm64'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+</Project>

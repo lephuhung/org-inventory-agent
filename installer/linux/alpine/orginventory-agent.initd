@@ -1,0 +1,25 @@
+#!/sbin/openrc-run
+# OpenRC service cho OrgInventory Agent (Alpine — không có systemd).
+name="OrgInventory Agent"
+description="IT Asset Inventory Agent"
+
+command="/opt/orginventory/OrgInventoryAgent"
+command_args="--data-dir /var/lib/orginventory --config /etc/orginventory/config.json"
+command_user="orginventory:orginventory"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+directory="/var/lib/orginventory"
+
+# Log qua supervise-daemon → file (agent ghi stdout/stderr).
+output_log="/var/log/orginventory/agent.log"
+error_log="/var/log/orginventory/agent.log"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    checkpath --directory --owner orginventory:orginventory --mode 0750 \
+        /var/lib/orginventory /var/log/orginventory
+}

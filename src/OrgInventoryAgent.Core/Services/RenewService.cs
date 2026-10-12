@@ -4,9 +4,8 @@ using Microsoft.Extensions.Logging;
 using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Crypto;
 using OrgInventoryAgent.Core.Net;
-using OrgInventoryAgent.Linux.Crypto;
 
-namespace OrgInventoryAgent.Linux.Services;
+namespace OrgInventoryAgent.Core.Services;
 
 public sealed class RenewRequest
 {
@@ -26,11 +25,11 @@ public sealed class RenewService : BackgroundService
     private readonly AgentConfig _config;
     private readonly ApiClient _api;
     private readonly EnrollCoordinator _enroll;
-    private readonly KeyStore _keyStore;
+    private readonly PemFileKeyStore _keyStore;
     private readonly ILogger<RenewService> _logger;
 
     public RenewService(AgentConfig config, ApiClient api, EnrollCoordinator enroll,
-        KeyStore keyStore, ILogger<RenewService> logger)
+        PemFileKeyStore keyStore, ILogger<RenewService> logger)
     {
         _config = config;
         _api = api;

@@ -3,10 +3,10 @@ using Microsoft.Extensions.Logging;
 using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Net;
 using OrgInventoryAgent.Core.Services;
-using OrgInventoryAgent.Linux.Collectors;
-using OrgInventoryAgent.Linux.Crypto;
+using OrgInventoryAgent.Core.Collectors;
+using OrgInventoryAgent.Core.Crypto;
 
-namespace OrgInventoryAgent.Linux.Services;
+namespace OrgInventoryAgent.Core.Services;
 
 /// <summary>
 /// Heartbeat định kỳ: chu kỳ ngẫu nhiên trong [interval - jitter, interval + jitter]
@@ -23,7 +23,7 @@ public sealed class HeartbeatService : BackgroundService
     private readonly EnrollCoordinator _enroll;
     private readonly OfflineCache _cache;
     private readonly InventoryService _inventoryService;
-    private readonly KeyStore _keyStore;
+    private readonly PemFileKeyStore _keyStore;
     private readonly ConfigSyncService _configSync;
     private readonly ILogger<HeartbeatService> _logger;
     private readonly AgentState _state;
@@ -31,7 +31,7 @@ public sealed class HeartbeatService : BackgroundService
 
     public HeartbeatService(AgentConfig config, ApiClient api, EndpointManager endpoints,
         EnrollCoordinator enroll, OfflineCache cache, InventoryService inventoryService,
-        KeyStore keyStore, ConfigSyncService configSync, AgentState state, ILogger<HeartbeatService> logger)
+        PemFileKeyStore keyStore, ConfigSyncService configSync, AgentState state, ILogger<HeartbeatService> logger)
     {
         _config = config; _api = api; _endpoints = endpoints; _enroll = enroll; _cache = cache;
         _inventoryService = inventoryService; _keyStore = keyStore; _configSync = configSync;
@@ -101,7 +101,7 @@ public sealed class HeartbeatService : BackgroundService
         {
             logged_user = Environment.UserName,
             uptime_sec = (long)(Environment.TickCount64 / 1000),
-            ip = LinuxPrimaryIp.Get(),
+            ip = PosixPrimaryIp.Get(),
             // Contract: optional field — server bỏ qua nếu format sai, agent cũ không
             // gửi vẫn chạy. Cùng giá trị với agent.version trong inventory.
             agent_version = Core.AppInfo.EffectiveVersion,

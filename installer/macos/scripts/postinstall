@@ -1,0 +1,26 @@
+#!/bin/bash
+# postinstall (pkg) — chuẩn bị thư mục + nạp LaunchDaemons.
+# Agent KHÔNG start ngay: cần config enroll_token từ backend trước
+# (install.sh ghi config rồi bootstrap daemon). Nếu config đã có (reinstall/
+# upgrade) thì bootstrap luôn.
+set -e
+
+mkdir -p /var/db/orginventory /var/log/orginventory /etc/orginventory
+chmod 0750 /var/db/orginventory /var/log/orginventory
+chmod 0755 /etc/orginventory
+chown -R root:wheel /var/db/orginventory /var/log/orginventory 2>/dev/null || true
+chmod 0755 /opt/orginventory/OrgInventoryAgent /opt/orginventory/apply-update.sh
+chmod 0644 /Library/LaunchDaemons/com.orginventory.agent*.plist
+chown root:wheel /Library/LaunchDaemons/com.orginventory.agent*.plist
+
+# Update watcher luôn bật (giống path unit trên Linux).
+launchctl bootstrap system /Library/LaunchDaemons/com.orginventory.agent.update.plist 2>/dev/null \
+    || launchctl load /Library/LaunchDaemons/com.orginventory.agent.update.plist 2>/dev/null || true
+
+# Nạp daemon chính nếu đã có config (upgrade path). Cài mới: install.sh lo.
+if [[ -f /etc/orginventory/config.json ]]; then
+    launchctl bootstrap system /Library/LaunchDaemons/com.orginventory.agent.plist 2>/dev/null \
+        || launchctl kickstart -k system/com.orginventory.agent 2>/dev/null \
+        || launchctl load /Library/LaunchDaemons/com.orginventory.agent.plist 2>/dev/null || true
+fi
+exit 0

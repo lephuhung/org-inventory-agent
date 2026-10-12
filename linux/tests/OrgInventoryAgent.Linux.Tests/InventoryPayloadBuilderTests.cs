@@ -1,4 +1,6 @@
+using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Collectors.Schema;
+using OrgInventoryAgent.Core.Collectors;
 using OrgInventoryAgent.Linux.Collectors;
 using OrgInventoryAgent.Linux;
 using Xunit;

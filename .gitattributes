@@ -6,6 +6,7 @@
 *.timer    text eol=lf
 *.spec     text eol=lf
 *.desktop  text eol=lf
+*.plist    text eol=lf
 postinst   text eol=lf
 prerm      text eol=lf
 postrm     text eol=lf

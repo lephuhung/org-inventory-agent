@@ -95,7 +95,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - name: Install packaging tools
-        run: sudo apt-get update && sudo apt-get install -y rpm dpkg-dev
+        run: sudo apt-get update && sudo apt-get install -y rpm dpkg-dev zstd
       - name: Pin version from tag
         run: |
           V="${{ needs.version.outputs.version }}"
@@ -116,23 +116,69 @@ jobs:
         run: |
           V="${{ needs.version.outputs.version }}"
           ./installer/linux/build-linux.sh dist
-          for RID in linux-x64 linux-arm64; do
+          for RID in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64; do
             mv "dist/$RID/OrgInventoryAgent" "dist/$RID/OrgInventoryAgent-$RID"
             (cd "dist/$RID" && sha256sum "OrgInventoryAgent-$RID" > "OrgInventoryAgent-$RID.sha256")
             echo "$V" > "dist/$RID/OrgInventoryAgent-$RID.version"
           done
-      - name: Build deb + rpm
+      - name: Build deb + rpm + tarball + pacman + apk
         run: |
           ./installer/linux/build-deb.sh linux-x64 dist
           ./installer/linux/build-rpm.sh linux-x64 dist
+          ./installer/linux/build-tarball.sh linux-x64 dist
+          ./installer/linux/build-tarball.sh linux-arm64 dist
+          ./installer/linux/build-pacman.sh linux-x64 dist
+          ./installer/linux/build-apk.sh linux-musl-x64 dist
+          ./installer/linux/build-apk.sh linux-musl-arm64 dist
       - uses: actions/upload-artifact@v4
         with:
           name: linux
           path: dist/
           if-no-files-found: error
 
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Pin version from tag
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          sed -i '' \
+            -e "s|<Version>[^<]*</Version>|<Version>$V</Version>|" \
+            -e "s|<AssemblyVersion>[^<]*</AssemblyVersion>|<AssemblyVersion>$V.0</AssemblyVersion>|" \
+            -e "s|<FileVersion>[^<]*</FileVersion>|<FileVersion>$V.0</FileVersion>|" \
+            macos/src/OrgInventoryAgent.MacOS/OrgInventoryAgent.MacOS.csproj
+          sed -i '' \
+            -e "s|<Version>[^<]*</Version>|<Version>$V</Version>|" \
+            -e "s|<AssemblyVersion>[^<]*</AssemblyVersion>|<AssemblyVersion>$V.0</AssemblyVersion>|" \
+            -e "s|<FileVersion>[^<]*</FileVersion>|<FileVersion>$V.0</FileVersion>|" \
+            src/OrgInventoryAgent.Core/OrgInventoryAgent.Core.csproj
+      - name: Build self-contained binaries
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          ./installer/macos/build-macos.sh dist
+          for RID in osx-x64 osx-arm64; do
+            mv "dist/$RID/OrgInventoryAgent" "dist/$RID/OrgInventoryAgent-$RID"
+            (cd "dist/$RID" && shasum -a 256 "OrgInventoryAgent-$RID" > "OrgInventoryAgent-$RID.sha256")
+            echo "$V" > "dist/$RID/OrgInventoryAgent-$RID.version"
+          done
+      - name: Build .pkg (unsigned)
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          ./installer/macos/build-pkg.sh osx-x64 dist "$V"
+          ./installer/macos/build-pkg.sh osx-arm64 dist "$V"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/
+          if-no-files-found: error
+
   release:
-    needs: [version, windows, linux]
+    needs: [version, windows, linux, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -147,15 +193,25 @@ jobs:
           mkdir -p release-assets
           # Windows MSI + checksum (artifact merge-multiple đặt file ở top-level assets/)
           cp assets/OrgInventoryAgent.msi assets/OrgInventoryAgent.msi.sha256 release-assets/
-          # Linux single-file binaries + checksum + version sidecar
-          for RID in linux-x64 linux-arm64; do
+          # Linux + macOS single-file binaries + checksum + version sidecar
+          for RID in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
             cp "assets/$RID/OrgInventoryAgent-$RID" \
                "assets/$RID/OrgInventoryAgent-$RID.sha256" \
                "assets/$RID/OrgInventoryAgent-$RID.version" release-assets/
           done
-          # Packages (.deb top-level; .rpm nằm sâu trong rpm/RPMS/<arch>/)
-          cp assets/orginventory-agent_*.deb release-assets/
+          # Packages (.deb + .tar.gz top-level; .rpm nằm sâu trong rpm/RPMS/<arch>/)
+          cp assets/orginventory-agent_*.deb assets/orginventory-agent_*.tar.gz release-assets/
           find assets/rpm -name '*.rpm' -exec cp {} release-assets/ \;
+          # Pacman (.pkg.tar.zst) + Alpine (.apk) + macOS .pkg
+          cp assets/orginventory-agent-*.pkg.tar.zst release-assets/
+          cp assets/orginventory-agent-*.apk release-assets/
+          cp assets/orginventory-agent_*.pkg release-assets/
+          # macOS launchd plists + apply-update + install script (backend download
+          # endpoint phục vụ lại các file này cho đường curl|bash trên Mac).
+          cp installer/macos/com.orginventory.agent.plist \
+             installer/macos/com.orginventory.agent.update.plist release-assets/
+          cp installer/macos/apply-update.sh release-assets/apply-update-macos.sh
+          cp installer/macos/install.sh release-assets/install-macos.sh
           # Install scripts (canonical trên Releases)
           cp installer/install.sh installer/install.ps1 installer/install-both.ps1 \
              installer/offline/install-offline.ps1 installer/offline/install-offline.cmd \
@@ -165,7 +221,7 @@ jobs:
         run: |
           V="${{ needs.version.outputs.version }}"
           cat > release-assets/agent-version.json <<EOF
-          {"msi_version": "$V", "linux": {"linux-x64": "$V", "linux-arm64": "$V"}, "velociraptor_msi_version": null}
+          {"msi_version": "$V", "linux": {"linux-x64": "$V", "linux-arm64": "$V", "linux-musl-x64": "$V", "linux-musl-arm64": "$V"}, "osx": {"osx-x64": "$V", "osx-arm64": "$V"}, "velociraptor_msi_version": null}
           EOF
           cat release-assets/agent-version.json
       - name: Create GitHub Release

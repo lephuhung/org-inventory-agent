@@ -4,7 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 namespace OrgInventoryAgent.Core.Crypto;
 
 /// <summary>
-/// Linux KeyStore — lưu cert + private key dạng PEM files trong data dir.
+/// Linux PemFileKeyStore — lưu cert + private key dạng PEM files trong data dir.
 /// - Cert: <c>{certDir}/machine-{machineId}.crt.pem</c> (mode 0644).
 /// - Key:  <c>{certDir}/machine-{machineId}.key.pem</c> (mode 0600, ECDSA PKCS#8).
 ///

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using OrgInventoryAgent.Core.Collectors;
 using OrgInventoryAgent.Core.Collectors.Schema;
 
 namespace OrgInventoryAgent.Linux.Collectors;
@@ -261,32 +262,10 @@ public static class LinuxPrivilegeControlCollector
     }
 }
 
-/// <summary>Đọc TCP listeners qua IPGlobalProperties — cross-platform .NET API.</summary>
+/// <summary>Đọc TCP listeners qua IPGlobalProperties — delegate PosixPortCollector (Core).</summary>
 public static class LinuxPortCollector
 {
-    public static List<ListeningPortInfo>? Collect(ILogger logger)
-    {
-        try
-        {
-            var props = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties();
-            var endpoints = props.GetActiveTcpListeners();
-            var list = endpoints
-                .Select(ep => new ListeningPortInfo
-                {
-                    Port = ep.Port,
-                    Protocol = "TCP",
-                    Address = ep.Address.ToString(),
-                })
-                .Take(200) // cap
-                .ToList();
-            return list.Count > 0 ? list : null;
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug("GetActiveTcpListeners lỗi: {Msg}", ex.Message);
-            return null;
-        }
-    }
+    public static List<ListeningPortInfo>? Collect(ILogger logger) => PosixPortCollector.Collect(logger);
 }
 
 /// <summary>Firewall detection — ufw / firewalld / nftables. null nếu không xác định.</summary>

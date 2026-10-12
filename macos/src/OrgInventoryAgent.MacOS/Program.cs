@@ -1,0 +1,247 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using OrgInventoryAgent.Core;
+using OrgInventoryAgent.Core.Collectors;
+using OrgInventoryAgent.Core.Crypto;
+using OrgInventoryAgent.Core.Logging;
+using OrgInventoryAgent.Core.Net;
+using OrgInventoryAgent.Core.Services;
+using OrgInventoryAgent.MacOS.Collectors;
+using System.Text.Json;
+
+namespace OrgInventoryAgent.MacOS;
+
+public class Program
+{
+    /// <summary>Data dir mặc định trên macOS cho system daemon.</summary>
+    public const string DefaultDataDir = "/var/db/orginventory";
+
+    /// <summary>Dir tồn tại VÀ ghi được (không chỉ Exists — /var/db/orginventory
+    /// root:wheel 0750 tồn tại sau install nhưng non-root không ghi được).</summary>
+    private static bool IsWritableDir(string path)
+    {
+        try
+        {
+            if (!Directory.Exists(path)) return false;
+            var probe = Path.Combine(path, $".wtest-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public static async Task<int> Main(string[] args)
+    {
+        var cli = CliArgs.Parse(args);
+
+        // AppPaths phải Initialize TRƯỚC khi bất kỳ code nào dùng AppPaths.*
+        // DefaultDataDir tồn tại nhưng không ghi được (root 0750, chạy non-root)
+        // → fallback user dir thay vì crash, để lệnh --print-* vẫn chạy được.
+        var dataDir = cli.DataDir
+            ?? Environment.GetEnvironmentVariable("ORGINV_DATA_DIR")
+            ?? (IsWritableDir(DefaultDataDir) ? DefaultDataDir
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "OrgInventory"));
+        try { AppPaths.Initialize(dataDir); }
+        catch (Exception ex) { Console.Error.WriteLine($"Không thể khởi tạo data dir '{dataDir}': {ex.Message}"); return 10; }
+
+        if (cli.PrintVersion) { Console.WriteLine($"{AppInfo.Name} v{AppInfo.Version}"); return 0; }
+        if (cli.ShowHelp)
+        {
+            Console.WriteLine($"""
+                OrgInventoryAgent v{AppInfo.Version} — macOS Agent
+                Sử dụng: OrgInventoryAgent [tùy chọn]
+                  --data-dir <path>        Thư mục dữ liệu (config/cache/log)
+                  --config <path>          File config.json (mặc định /etc/orginventory/config.json)
+                  --enroll-token <token>   Enroll token (lưu vào config, xóa sau enroll)
+                  --endpoint <url>         Server URL mTLS
+                  --inventory-seconds <n>  Chu kỳ inventory (giây, test)
+                  --once                   Enroll (nếu cần) → inventory 1 lần rồi exit
+                  --send-inventory         Gửi inventory 1 lần rồi exit (tương đương --once)
+                  --check-update           Kiểm tra phiên bản mới trên release (không tải) rồi exit
+                  --update-now             Kiểm tra, tải và áp dụng bản mới ngay rồi exit
+                  --print-config           In cấu hình hiện tại
+                  --print-inventory        In payload inventory v4 đầy đủ
+                  --print-security         In security posture
+                  --print-fingerprint      In fingerprint
+                  --version, -v            In version
+                  --about, --info          In cam kết an toàn
+                  --help, -h               In hướng dẫn này
+                """);
+            return 0;
+        }
+        if (cli.PrintAbout) { Console.WriteLine(AppInfo.TransparencyAndSafetyCommitment); return 0; }
+        if (cli.PrintConfig)
+        {
+            var cfg = PosixConfig.Load(cli.ConfigPath);
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                data_dir = AppPaths.DataDir,
+                config_path = cli.ConfigPath ?? PosixConfig.DefaultConfigPath,
+                endpoints = cfg.Endpoints,
+                heartbeat_interval_seconds = cfg.HeartbeatIntervalSeconds,
+                heartbeat_jitter_seconds = cfg.HeartbeatJitterSeconds,
+                inventory_interval_hours = cfg.InventoryIntervalHours,
+                renew_before_percent = cfg.RenewBeforePercent,
+                enrolled = cfg.Enrolled,
+                machine_id = cfg.MachineId,
+                token = cfg.Token is null ? null : (cfg.Token.Length > 12 ? cfg.Token[..4] + "…" : "***"),
+                client_cert_thumbprint = cfg.ClientCertThumbprint,
+                cert_store_location = cfg.CertStoreLocation,
+            }, new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+        if (cli.PrintInventory)
+        {
+            using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+            var provider = new MacosInventoryProvider(lf.CreateLogger<MacosInventoryProvider>());
+            var snapshot = provider.CollectSnapshot();
+            var envelope = provider.Collect();
+            Console.WriteLine(JsonSerializer.Serialize(new { envelope, snapshot }, new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+        if (cli.PrintSecurity)
+        {
+            using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+            var sec = MacosSecurityCollector.Collect(lf.CreateLogger("Security"));
+            Console.WriteLine(JsonSerializer.Serialize(sec, new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+        if (cli.PrintFingerprint)
+        {
+            using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+            var fp = new MacosFingerprintCollector(lf.CreateLogger<MacosFingerprintCollector>()).Collect();
+            Console.WriteLine(JsonSerializer.Serialize(fp, new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+
+        var config = PosixConfig.Load(cli.ConfigPath);
+        if (!string.IsNullOrWhiteSpace(cli.Endpoint)) config.SetPrimaryEndpoint(cli.Endpoint);
+        if (cli.InventorySeconds.HasValue) config.InventoryIntervalSeconds = cli.InventorySeconds.Value;
+        if (!string.IsNullOrWhiteSpace(cli.EnrollToken)) { config.Token = cli.EnrollToken; PosixConfig.Save(config, cli.ConfigPath); }
+
+        if (cli.CheckUpdate || cli.UpdateNow)
+            return await RunUpdateCheckAsync(config, cli.UpdateNow);
+
+        if (cli.Once || cli.SendInventory)
+            return await RunOnceAsync(config, cli);
+
+        return await RunServiceAsync(config, cli);
+    }
+
+    // ── Service mode ────────────────────────────────────────────
+    private static async Task<int> RunServiceAsync(AgentConfig config, CliArgs cli)
+    {
+        var builder = Host.CreateApplicationBuilder(Array.Empty<string>());
+        builder.Logging.ClearProviders();
+        builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss'Z' "; });
+        try { builder.Logging.AddProvider(new FileLoggerProvider(AppPaths.LogsDir)); } catch { }
+
+        RegisterServices(builder, config);
+
+        using var host = builder.Build();
+        var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+        logger.LogInformation("================================================================================");
+        logger.LogInformation("{Name} v{Version} — {FullTitle}", AppInfo.Name, AppInfo.Version, AppInfo.FullTitle);
+        logger.LogInformation("Đơn vị phát triển: {Dev}", AppInfo.DeveloperShort);
+        logger.LogInformation("DataDir={Dir} Config={Cfg}", AppPaths.DataDir, cli.ConfigPath ?? PosixConfig.DefaultConfigPath);
+        logger.LogInformation("================================================================================");
+
+        var coordinator = host.Services.GetRequiredService<EnrollCoordinator>();
+        _ = Task.Run(() => coordinator.EnsureEnrolledAsync(CancellationToken.None));
+
+        await host.RunAsync();
+        return 0;
+    }
+
+    private static void RegisterServices(HostApplicationBuilder builder, AgentConfig config)
+    {
+        builder.Services.AddSingleton(config);
+        builder.Services.AddSingleton(AgentState.Load());
+        builder.Services.AddSingleton<PemFileKeyStore>();
+        builder.Services.AddSingleton<IKeyStore>(sp => sp.GetRequiredService<PemFileKeyStore>());
+        builder.Services.AddSingleton<EndpointManager>();
+        builder.Services.AddSingleton<OfflineCache>();
+        builder.Services.AddSingleton<IFingerprintCollector, MacosFingerprintCollector>();
+        builder.Services.AddSingleton<IPosixInventoryProvider, MacosInventoryProvider>();
+        builder.Services.AddSingleton<ApiClient>();
+        builder.Services.AddSingleton<EnrollClient>();
+        builder.Services.AddSingleton<EnrollCoordinator>();
+        builder.Services.AddSingleton<HeartbeatService>();
+        builder.Services.AddSingleton<InventoryService>();
+        builder.Services.AddSingleton<RenewService>();
+        builder.Services.AddSingleton<ConfigSyncService>();
+        builder.Services.AddSingleton<UpdateService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<HeartbeatService>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<InventoryService>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<RenewService>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigSyncService>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
+    }
+
+    // ── --check-update / --update-now ──────────────────────────────
+    private static async Task<int> RunUpdateCheckAsync(AgentConfig config, bool apply)
+    {
+        using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+        var svc = new UpdateService(config, AgentState.Load(), loggerFactory.CreateLogger<UpdateService>());
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+
+        if (!apply)
+        {
+            var r = await svc.CheckAsync(cts.Token);
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                current_version = r.CurrentVersion,
+                latest_version = r.LatestVersion,
+                update_available = r.UpdateAvailable,
+                pending_version = r.PendingVersion,
+                error = r.Error,
+            }, new JsonSerializerOptions { WriteIndented = true }));
+            return r.Error is null ? 0 : 1;
+        }
+
+        var staged = await svc.CheckAndApplyAsync(cts.Token);
+        Console.WriteLine(staged
+            ? "Đã tải và áp dụng/stage bản mới (xem log)."
+            : "Không có bản mới hoặc cập nhật thất bại (xem log).");
+        return staged ? 0 : 2;
+    }
+
+    // ── Once mode (smoke test install / --send-inventory) ────────
+    private static async Task<int> RunOnceAsync(AgentConfig config, CliArgs cli)
+    {
+        using var loggerFactory = LoggerFactory.Create(b =>
+        {
+            b.AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss'Z' "; });
+            try { b.AddProvider(new FileLoggerProvider(AppPaths.LogsDir)); } catch { }
+        });
+        var logger = loggerFactory.CreateLogger("Once");
+        logger.LogInformation("Chế độ --once: enroll (nếu cần) → heartbeat → inventory.");
+
+        var keyStore = new PemFileKeyStore(loggerFactory.CreateLogger<PemFileKeyStore>());
+        var endpoints = new EndpointManager(config, loggerFactory.CreateLogger<EndpointManager>());
+        var api = new ApiClient(config, endpoints, keyStore, loggerFactory.CreateLogger<ApiClient>());
+        var enrollClient = new EnrollClient(api, loggerFactory.CreateLogger<EnrollClient>());
+        var state = AgentState.Load();
+        var fingerprint = new MacosFingerprintCollector(loggerFactory.CreateLogger<MacosFingerprintCollector>());
+        var enroll = new EnrollCoordinator(config, api, enrollClient, endpoints, keyStore, fingerprint, state,
+            loggerFactory.CreateLogger<EnrollCoordinator>());
+        var cache = new OfflineCache(loggerFactory.CreateLogger<OfflineCache>());
+        var provider = new MacosInventoryProvider(loggerFactory.CreateLogger<MacosInventoryProvider>());
+        var inventory = new InventoryService(config, api, endpoints, enroll, cache, provider, state,
+            loggerFactory.CreateLogger<InventoryService>());
+
+        var ok = await enroll.EnsureEnrolledAsync(CancellationToken.None);
+        if (!ok && !AgentIdentity.IsEnrolled(config)) { logger.LogWarning("Chưa enroll được — exit 0 (service sẽ retry)."); return 0; }
+
+        var configSync = new ConfigSyncService(config, api, enroll, state,
+            loggerFactory.CreateLogger<ConfigSyncService>());
+        var heartbeat = new HeartbeatService(config, api, endpoints, enroll, cache, inventory,
+            keyStore, configSync, state, loggerFactory.CreateLogger<HeartbeatService>());
+        var hbOk = await heartbeat.SendOnceAsync(ct: CancellationToken.None);
+        logger.LogInformation("--once heartbeat: {Ok}", hbOk ? "OK" : "FAIL");
+        await inventory.SendOnceAsync(CancellationToken.None);
+        return 0;
+    }
+}
