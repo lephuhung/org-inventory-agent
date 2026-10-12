@@ -125,6 +125,28 @@ public class MacosCollectorParseTests
     }
 
     [Fact]
+    public void ParseSoftwareUpdate_RealFormat_RecommendedAndRestart()
+    {
+        // Format thật của `softwareupdate -l` (macOS 15/26): "Recommended: YES"
+        // không quote, update cần reboot có "Action: restart".
+        var output = """
+            Software Update Tool
+
+            Finding available software
+            Software Update found the following new or updated software:
+            * Label: macOS 26.6.3-25G212
+                    Title: macOS 26.6.3, Version: 26.6.3, Size: 3145728K, Recommended: YES, Action: restart,
+            * Label: Safari26.0.1
+                    Title: Safari, Version: 26.0.1, Size: 102400K, Recommended: YES,
+            """;
+        var st = MacosUpdateCollector.Parse(output);
+        Assert.Equal("updates-available", st.Status);
+        Assert.Equal(2, st.PendingCount);
+        Assert.Equal(2, st.SecurityPendingCount);
+        Assert.True(st.RebootRequired);
+    }
+
+    [Fact]
     public void ParseUsersUniqueId_ParsesNameUid()
     {
         var output = "daemon        1\nadmin         501\n_guest        201\n";

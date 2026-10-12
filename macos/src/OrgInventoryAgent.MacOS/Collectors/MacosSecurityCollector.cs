@@ -39,15 +39,19 @@ public static class MacosUpdateCollector
 
         var pending = output.Split('\n')
             .Count(l => l.TrimStart().StartsWith("* Label:", StringComparison.Ordinal));
+        // Output thật của `softwareupdate -l`: dòng "Recommended: YES" (không quote).
         var sec = output.Split('\n')
-            .Count(l => l.Contains("recommended=\"YES\"", StringComparison.OrdinalIgnoreCase));
+            .Count(l => l.Contains("Recommended:", StringComparison.OrdinalIgnoreCase)
+                     && l.Contains("YES", StringComparison.OrdinalIgnoreCase));
+        // Update cần restart có "Action: restart" trong block của nó.
+        var reboot = output.Contains("Action: restart", StringComparison.OrdinalIgnoreCase)
+                  || output.Contains("[restart]", StringComparison.OrdinalIgnoreCase);
         return new UpdateStatus
         {
             Status = pending > 0 ? "updates-available" : "up-to-date",
             PendingCount = pending,
             SecurityPendingCount = sec > 0 ? sec : null,
-            RebootRequired = output.Contains("[restart]", StringComparison.OrdinalIgnoreCase)
-                          || output.Contains("requires.*restart", StringComparison.OrdinalIgnoreCase) ? true : null,
+            RebootRequired = reboot ? true : null,
         };
     }
 }
@@ -81,9 +85,10 @@ public static class MacosRemoteAccessCollector
         var status = new RemoteAccessStatus();
         var services = new List<string>();
 
-        // systemsetup -getremotelogin cần root; không root → thử launchctl list.
+        // systemsetup -getremotelogin cần root; non-root in "administrator access"
+        // ra stdout với exit 0 → phải check nội dung, không chỉ null.
         var remoteLogin = MacosCmd.Run("/usr/sbin/systemsetup", "-getremotelogin");
-        if (remoteLogin is not null)
+        if (remoteLogin is not null && remoteLogin.Contains("Remote Login:", StringComparison.OrdinalIgnoreCase))
         {
             var on = remoteLogin.Contains("Remote Login: On", StringComparison.OrdinalIgnoreCase);
             status.SshEnabled = on;
@@ -91,15 +96,26 @@ public static class MacosRemoteAccessCollector
         }
         else
         {
-            var ssh = MacosCmd.Run("/bin/launchctl", "list com.openssh.sshd");
-            if (ssh is not null) { status.SshEnabled = true; services.Add("sshd"); }
+            // Fallback: sshd socket-activated trên macOS mới — `launchctl print`
+            // trả service entry khi Remote Login bật (non-root cũng chạy được).
+            var ssh = MacosCmd.Run("/bin/launchctl", "print system/com.openssh.sshd");
+            if (ssh is not null && !ssh.Contains("Could not find service", StringComparison.OrdinalIgnoreCase))
+            {
+                status.SshEnabled = true;
+                services.Add("sshd");
+            }
+            else
+            {
+                status.SshEnabled = false;
+            }
         }
 
         var screensharing = MacosCmd.Run("/bin/launchctl", "print system/com.apple.screensharing");
-        if (screensharing is not null && screensharing.Contains("state = running", StringComparison.OrdinalIgnoreCase))
+        if (screensharing is not null)
         {
-            status.RemoteDesktopEnabled = true;
-            services.Add("screensharing");
+            var on = screensharing.Contains("state = running", StringComparison.OrdinalIgnoreCase);
+            status.RemoteDesktopEnabled = on;
+            if (on) services.Add("screensharing");
         }
 
         status.Services = services.Count > 0 ? services : null;
@@ -162,17 +178,26 @@ public static class MacosPrivilegeControlCollector
             SudoInstalled = File.Exists("/usr/bin/sudo"),
         };
 
+        // Root macOS mặc định disabled (không password hash). macOS mới đã xóa
+        // attribute AuthenticationAuthority → check ShadowHashData: có hash =
+        // root được enable (dsenableroot), không có = locked.
         var auth = MacosCmd.Run("/usr/bin/dscl", ". -read /Users/root AuthenticationAuthority");
-        if (auth is not null)
+        if (auth is not null && auth.Contains("DisabledUser", StringComparison.OrdinalIgnoreCase))
         {
-            // Root macOS mặc định disabled (không password hash). Marker chính:
-            // ;DisabledUser; trong AuthenticationAuthority. Có ShadowHash/SaltedSHA
-            // → root đã được enable bằng dsenableroot.
-            if (auth.Contains("DisabledUser", StringComparison.OrdinalIgnoreCase))
-                status.RootAccountLocked = true;
-            else if (auth.Contains("ShadowHash", StringComparison.OrdinalIgnoreCase) ||
-                     auth.Contains("SaltedSHA", StringComparison.OrdinalIgnoreCase))
-                status.RootAccountLocked = false;
+            status.RootAccountLocked = true;
+        }
+        else if (auth is not null &&
+                 (auth.Contains("ShadowHash", StringComparison.OrdinalIgnoreCase) ||
+                  auth.Contains("SaltedSHA", StringComparison.OrdinalIgnoreCase)))
+        {
+            status.RootAccountLocked = false;
+        }
+        else
+        {
+            var hash = MacosCmd.Run("/usr/bin/dscl", ". -read /Users/root ShadowHashData");
+            if (hash is not null)
+                // "No such key: ShadowHashData" = root chưa có password = locked.
+                status.RootAccountLocked = hash.Contains("No such key", StringComparison.OrdinalIgnoreCase);
         }
         return status;
     }

@@ -21,7 +21,10 @@ public sealed class MacosFingerprintCollector : IFingerprintCollector
     public FingerprintPayload Collect()
     {
         var rawUuid = GetIoPlatformUuid() ?? MacosOsCollector.GetHardwareField("platform_UUID");
-        var rawHostUuid = MacosCmd.Sysctl("kern.hostuuid");
+        // kern.hostuuid thiếu trên Apple Virtualization VM → fallback hash
+        // platform_UUID (vẫn machine-unique, khác slot smbios_uuid dùng raw).
+        var rawHostUuid = MacosCmd.Sysctl("kern.hostuuid")
+                          ?? MacosOsCollector.GetHardwareField("platform_UUID");
         var rawSerial = MacosOsCollector.GetHardwareField("serial_number");
 
         _logger.LogDebug("macOS fingerprint: ioplatform_uuid={A}, hostuuid={B}, serial={C}",

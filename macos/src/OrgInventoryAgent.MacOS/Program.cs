@@ -54,7 +54,7 @@ public class Program
                 """);
             return 0;
         }
-        if (cli.PrintAbout) { Console.WriteLine(Core.AppInfo.TransparencyAndSafetyCommitment); return 0; }
+        if (cli.PrintAbout) { Console.WriteLine(AppInfo.TransparencyAndSafetyCommitment); return 0; }
         if (cli.PrintConfig)
         {
             var cfg = PosixConfig.Load(cli.ConfigPath);
