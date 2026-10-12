@@ -3,6 +3,7 @@ using OrgInventoryAgent;
 using OrgInventoryAgent.Core;
 using OrgInventoryAgent.Core.Services;
 using OrgInventoryAgent.Services;
+using HeartbeatService = OrgInventoryAgent.Services.HeartbeatService;
 using Xunit;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]

@@ -11,6 +11,12 @@ using OrgInventoryAgent.Core.Logging;
 using OrgInventoryAgent.Core.Net;
 using OrgInventoryAgent.Services;
 using OrgInventoryAgent.Core.Services;
+// Core.Services có bản POSIX trùng tên (Linux/macOS) — Windows dùng service riêng.
+using ConfigSyncService = OrgInventoryAgent.Services.ConfigSyncService;
+using EnrollCoordinator = OrgInventoryAgent.Services.EnrollCoordinator;
+using HeartbeatService = OrgInventoryAgent.Services.HeartbeatService;
+using InventoryService = OrgInventoryAgent.Services.InventoryService;
+using RenewService = OrgInventoryAgent.Services.RenewService;
 
 namespace OrgInventoryAgent;
 
