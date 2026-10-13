@@ -1,0 +1,4 @@
+1. Chế độ hoạt động chỉ đọc (Read-only): Chỉ truy xuất thông số hệ thống qua /sys, /proc, dpkg/rpm, systemd và NetworkInterface chuẩn; không thay đổi hay can thiệp vào cấu hình máy trạm.
+2. Bảo vệ dữ liệu riêng tư: Tuyệt đối không đọc tài liệu, email, tin nhắn, mật khẩu, lịch sử duyệt web hay dữ liệu cá nhân của người dùng.
+3. Bảo mật mTLS & Khóa cục bộ: Khóa bí mật (Private Key) được sinh và lưu trữ an toàn dưới dạng PEM file với quyền 0600 trong /etc/orginventory/, không bao giờ gửi ra ngoài.
+4. Minh bạch & Mã nguồn kiểm soát: Tiến trình chạy nền minh bạch (systemd unit), nhật ký ghi cục bộ rõ ràng tại /var/lib/orginventory/logs phục vụ kiểm toán.
