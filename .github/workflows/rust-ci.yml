@@ -2,9 +2,9 @@ name: rust-ci
 
 on:
   push:
-    paths: ["rust/**", "installer/linux/build-linux-rust.sh", ".github/workflows/rust-ci.yml"]
+    paths: ["rust/**", "installer/linux/build-linux-rust.sh", "installer/macos/**", ".github/workflows/rust-ci.yml"]
   pull_request:
-    paths: ["rust/**", "installer/linux/build-linux-rust.sh", ".github/workflows/rust-ci.yml"]
+    paths: ["rust/**", "installer/linux/build-linux-rust.sh", "installer/macos/**", ".github/workflows/rust-ci.yml"]
   workflow_dispatch:
 
 jobs:
@@ -55,3 +55,48 @@ jobs:
         with:
           name: rust-linux
           path: dist/*/OrgInventoryAgent-*
+
+  build-macos:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Test + clippy (native macOS)
+        working-directory: rust
+        run: |
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+      - name: Build 2 RIDs
+        run: |
+          ./installer/macos/build-macos-rust.sh dist
+          for RID in osx-x64 osx-arm64; do
+            file "dist/$RID/OrgInventoryAgent"
+          done
+      - name: Smoke test (native arm64)
+        run: |
+          B=dist/osx-arm64/OrgInventoryAgent
+          $B --version
+          $B --data-dir "$RUNNER_TEMP/oi" --print-fingerprint
+          $B --data-dir "$RUNNER_TEMP/oi" --print-inventory > "$RUNNER_TEMP/inv.json"
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); e=d['envelope']; assert e['agent']['platform']=='macos', e; assert d['snapshot'].get('cpu'), d['snapshot']; print('inventory ok:', d['snapshot'].get('os_name'))" "$RUNNER_TEMP/inv.json"
+      - name: Build .pkg (Rust binaries)
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -n1)
+          for RID in osx-x64 osx-arm64; do
+            AGENT_BIN="dist/$RID/OrgInventoryAgent" ./installer/macos/build-pkg.sh "$RID" dist "$V"
+            mv "dist/$RID/OrgInventoryAgent" "dist/$RID/OrgInventoryAgent-$RID"
+            (cd "dist/$RID" && shasum -a 256 "OrgInventoryAgent-$RID" > "OrgInventoryAgent-$RID.sha256")
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-macos
+          path: |
+            dist/*/OrgInventoryAgent-*
+            dist/*.pkg

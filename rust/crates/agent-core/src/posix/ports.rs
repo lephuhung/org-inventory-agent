@@ -6,6 +6,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 const MAX_PORTS: usize = 200;
 const TCP_LISTEN: &str = "0A";
 
+#[cfg(not(target_os = "macos"))]
 pub fn collect() -> Option<Vec<ListeningPortInfo>> {
     let mut list = Vec::new();
     for (path, v6) in [("/proc/net/tcp", false), ("/proc/net/tcp6", true)] {
@@ -15,6 +16,46 @@ pub fn collect() -> Option<Vec<ListeningPortInfo>> {
     }
     list.truncate(MAX_PORTS);
     (!list.is_empty()).then_some(list)
+}
+
+/// macOS: no /proc — .NET reads the same TCP table that `netstat -an -p tcp` prints.
+#[cfg(target_os = "macos")]
+pub fn collect() -> Option<Vec<ListeningPortInfo>> {
+    let out = std::process::Command::new("/usr/sbin/netstat")
+        .args(["-an", "-p", "tcp"])
+        .output()
+        .ok()?;
+    let mut list = parse_netstat_listen(&String::from_utf8_lossy(&out.stdout));
+    list.truncate(MAX_PORTS);
+    (!list.is_empty()).then_some(list)
+}
+
+/// Parse BSD `netstat -an -p tcp` rows like `tcp4  0  0  *.22  *.*  LISTEN`.
+pub fn parse_netstat_listen(content: &str) -> Vec<ListeningPortInfo> {
+    let mut seen = std::collections::HashSet::new();
+    content
+        .lines()
+        .filter_map(|line| {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() < 6 || !cols[0].starts_with("tcp") || cols[5] != "LISTEN" {
+                return None;
+            }
+            let (addr, port) = cols[3].rsplit_once('.')?;
+            let port: i32 = port.parse().ok()?;
+            let v6 = cols[0] == "tcp6";
+            let address = match addr {
+                "*" if v6 => "::".to_string(),
+                "*" => "0.0.0.0".to_string(),
+                a => a.split('%').next().unwrap_or(a).to_string(),
+            };
+            seen.insert((address.clone(), port))
+                .then_some(ListeningPortInfo {
+                    port,
+                    protocol: "TCP".into(),
+                    address: Some(address),
+                })
+        })
+        .collect()
 }
 
 pub fn parse_proc_net_tcp(content: &str, v6: bool) -> Vec<ListeningPortInfo> {
@@ -63,6 +104,19 @@ fn parse_v6(hex: &str) -> Option<Ipv6Addr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn netstat_bsd_listen() {
+        let out = "Active Internet connections (including servers)\nProto Recv-Q Send-Q  Local Address          Foreign Address        (state)\ntcp4       0      0  127.0.0.1.631          *.*                    LISTEN\ntcp6       0      0  *.22                   *.*                    LISTEN\ntcp4       0      0  *.22                   *.*                    LISTEN\ntcp4       0      0  192.168.1.5.52000      1.2.3.4.443            ESTABLISHED\ntcp6       0      0  fe80::1%lo0.8021       *.*                    LISTEN\n";
+        let l = parse_netstat_listen(out);
+        assert_eq!(l.len(), 4);
+        assert_eq!(l[0].address.as_deref(), Some("127.0.0.1"));
+        assert_eq!(l[0].port, 631);
+        assert_eq!(l[1].address.as_deref(), Some("::"));
+        assert_eq!(l[2].address.as_deref(), Some("0.0.0.0"));
+        assert_eq!(l[3].address.as_deref(), Some("fe80::1"));
+        assert_eq!(l[3].port, 8021);
+    }
 
     #[test]
     fn parses_listeners_only() {

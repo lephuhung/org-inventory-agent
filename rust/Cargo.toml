@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/agent-core", "crates/collectors-linux", "crates/orginventory-agent"]
+members = ["crates/agent-core", "crates/collectors-linux", "crates/collectors-macos", "crates/orginventory-agent"]
 
 [workspace.package]
 version = "1.3.1"
@@ -12,6 +12,7 @@ rust-version = "1.80"
 [workspace.dependencies]
 agent-core = { path = "crates/agent-core" }
 collectors-linux = { path = "crates/collectors-linux" }
+collectors-macos = { path = "crates/collectors-macos" }
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 hex = "0.4"

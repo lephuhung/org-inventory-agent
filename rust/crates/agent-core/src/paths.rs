@@ -6,8 +6,18 @@ use std::sync::OnceLock;
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub const LINUX_DATA_DIR: &str = "/var/lib/orginventory";
+pub const MACOS_DATA_DIR: &str = "/var/db/orginventory";
 
-/// `--data-dir` > `ORGINV_DATA_DIR` > `ORGINVENTORY_DATA_DIR` > /var/lib/orginventory (if it exists
+/// Installer-created system data dir for the current OS.
+pub fn system_data_dir() -> &'static str {
+    if cfg!(target_os = "macos") {
+        MACOS_DATA_DIR
+    } else {
+        LINUX_DATA_DIR
+    }
+}
+
+/// `--data-dir` > `ORGINV_DATA_DIR` > `ORGINVENTORY_DATA_DIR` > [`system_data_dir`] (if it exists
 /// and is writable) > ~/.local/share/OrgInventory.
 pub fn resolve_data_dir(cli: Option<&str>) -> PathBuf {
     if let Some(d) = cli.filter(|d| !d.trim().is_empty()) {
@@ -20,7 +30,7 @@ pub fn resolve_data_dir(cli: Option<&str>) -> PathBuf {
             }
         }
     }
-    let system = Path::new(LINUX_DATA_DIR);
+    let system = Path::new(system_data_dir());
     if system.is_dir() && is_writable(system) {
         return system.to_path_buf();
     }
