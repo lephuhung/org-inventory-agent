@@ -39,11 +39,18 @@
     <Icon Id="app.ico" SourceFile="$(sys.SOURCEFILEDIR)\..\Assets\agent.ico" />
     <Property Id="ARPPRODUCTICON" Value="app.ico" />
 
-    <!-- Properties truyền từ msiexec (Secure: giữ được qua custom action / service) -->
+    <!-- Properties truyền từ msiexec (Secure: giữ được qua custom action / service).
+         AppSearch (RegistrySearch) chỉ chạy khi property CHƯA được set trên command line —
+         nếu msiexec chạy không property (vd self-updater spawn `msiexec /i /qn`), giá trị
+         registry hiện có được giữ lại thay vì bị ghi đè rỗng. -->
     <Property Id="ENROLL_TOKEN" Secure="yes" />
     <Property Id="TOKEN" Secure="yes" />
-    <Property Id="ENDPOINTS" Secure="yes" />
-    <Property Id="HTTP_PROXY" Secure="yes" />
+    <Property Id="ENDPOINTS" Secure="yes">
+      <RegistrySearch Id="SearchExistingEndpoints" Root="HKLM" Key="SOFTWARE\OrgInventory" Name="Endpoints" Type="raw" />
+    </Property>
+    <Property Id="HTTP_PROXY" Secure="yes">
+      <RegistrySearch Id="SearchExistingHttpProxy" Root="HKLM" Key="SOFTWARE\OrgInventory" Name="HttpProxy" Type="raw" />
+    </Property>
 
     <SetProperty Id="ENROLL_TOKEN" Value="[TOKEN]" Before="CostInitialize" Sequence="first" Condition="TOKEN AND NOT ENROLL_TOKEN" />
 

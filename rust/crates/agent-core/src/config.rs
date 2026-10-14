@@ -388,6 +388,16 @@ fn merge_state(state: &AgentConfig, cfg: &mut AgentConfig) {
     if state.last_enrolled_at.is_some() {
         cfg.last_enrolled_at = state.last_enrolled_at;
     }
+    // Windows: bootstrap `/etc/orginventory/config.json` không tồn tại → endpoints/token
+    // chỉ còn nguồn từ state (config.json) + registry overlay. Nếu bootstrap không có thì
+    // lấy của state — nếu không, một giao dịch MSI prop-less ghi Endpoints rỗng đè registry
+    // sẽ làm agent chết đứng "Chưa có endpoint server" dù config.json vẫn đầy đủ.
+    if cfg.endpoints.is_empty() && !state.endpoints.is_empty() {
+        cfg.endpoints = state.endpoints.clone();
+    }
+    if !non_blank(&cfg.token) && non_blank(&state.token) {
+        cfg.token = state.token.clone();
+    }
     let d = AgentConfig::default();
     if state.heartbeat_interval_seconds != d.heartbeat_interval_seconds {
         cfg.heartbeat_interval_seconds = state.heartbeat_interval_seconds;
@@ -517,6 +527,23 @@ mod tests {
         let mut cfg = pc.load();
         assert_eq!(cfg.endpoints, vec!["https://new"]);
         assert_eq!(cfg.token.as_deref(), Some("fresh"));
+    }
+
+    #[test]
+    fn posix_state_endpoints_fallback_when_bootstrap_missing() {
+        // Windows: bootstrap `/etc/...` không tồn tại → endpoints/token lấy từ state.
+        let dir = tempfile::tempdir().unwrap();
+        let boot = dir.path().join("khong-ton-tai.json");
+        let state = dir.path().join("state-config.json");
+        std::fs::write(
+            &state,
+            r#"{"endpoints":["https://st"],"enrolled":true,"machineId":"m-1","token":"t9","heartbeatIntervalSeconds":45}"#,
+        )
+        .unwrap();
+        let pc = PosixConfig::new(Some(boot.to_str().unwrap()), state.clone());
+        let mut cfg = pc.load();
+        assert_eq!(cfg.endpoints, vec!["https://st"]);
+        assert_eq!(cfg.token.as_deref(), Some("t9"));
         assert!(cfg.enrolled);
         assert_eq!(cfg.machine_id.as_deref(), Some("m-1"));
         assert_eq!(cfg.heartbeat_interval_seconds, 45);

@@ -288,20 +288,33 @@ impl UpdateService {
     /// Windows: stage MSI rồi spawn `msiexec /i /qn` tách biệt — port của
     /// `UpdateService.StartWindowsUpgrade`. MSI (MajorUpgrade + ServiceControl
     /// Stop=both/Start=install) tự thay file + restart service; không dùng pending marker.
+    ///
+    /// PHẢI truyền lại ENDPOINTS/HTTP_PROXY: component RegistryConfigComponent ghi
+    /// `Endpoints=[ENDPOINTS]` vô điều kiện — msiexec không property → ghi RỖNG đè
+    /// registry → agent mất endpoint vĩnh viễn sau khi service restart.
+    /// (MSI từ 1.4.2 còn có AppSearch đọc lại registry làm fallback; đây là lớp thứ 2.)
     #[cfg(windows)]
     fn apply_staged(&self, msi: &Path, version: &str) {
         let log_path = self.update_dir.join("msi-install.log");
-        match std::process::Command::new("msiexec.exe")
-            .args([
-                "/i",
-                &msi.to_string_lossy(),
-                "/qn",
-                "/norestart",
-                "/l*v",
-                &log_path.to_string_lossy(),
-            ])
-            .spawn()
-        {
+        let (endpoints, proxy) = {
+            let cfg = self.config.lock().unwrap();
+            (cfg.endpoints.join(";"), cfg.http_proxy.clone().unwrap_or_default())
+        };
+        let mut args = vec![
+            "/i".to_string(),
+            msi.to_string_lossy().into_owned(),
+            "/qn".into(),
+            "/norestart".into(),
+        ];
+        if !endpoints.is_empty() {
+            args.push(format!("ENDPOINTS={endpoints}"));
+        }
+        if !proxy.trim().is_empty() {
+            args.push(format!("HTTP_PROXY={}", proxy.trim()));
+        }
+        args.push("/l*v".into());
+        args.push(log_path.to_string_lossy().into_owned());
+        match std::process::Command::new("msiexec.exe").args(&args).spawn() {
             Ok(_) => log::info!(
                 target: "UpdateService",
                 "Đã khởi chạy nâng cấp MSI v{version} — service sẽ restart trong giây lát."
