@@ -1,0 +1,200 @@
+name: rust-beta
+
+# Beta release đóng gói agent RUST (không phải .NET) — chạy thủ công qua
+# workflow_dispatch. Tag tạo ra là `rust-beta-v<version>` (không khớp pattern
+# `v*` của release.yml nên không trigger pipeline .NET). Release được tạo là
+# pre-release; asset names giữ nguyên quy ước release.yml để install scripts /
+# backend download endpoint dùng lại được khi trỏ tay vào tag beta.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version beta (vd 1.4.0-beta.1)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - id: v
+        run: |
+          V="${{ inputs.version }}"
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=rust-beta-v$V" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+      - name: Pin version (rust workspace + MSI)
+        shell: pwsh
+        run: |
+          $v = "${{ needs.version.outputs.version }}"
+          $cargo = "rust/Cargo.toml"
+          (Get-Content $cargo -Raw) -replace '(?m)^version = "[^"]*"', "version = `"$v`"" |
+            Set-Content $cargo -NoNewline -Encoding utf8
+          $wxs = "installer/Product.wxs"
+          (Get-Content $wxs -Raw) -creplace 'Version="[\d.]+"', "Version=`"$v`"" |
+            Set-Content $wxs -NoNewline -Encoding utf8
+      - name: Build exe + MSI
+        shell: pwsh
+        run: .\installer\build-windows-rust.ps1 -Msi -OutDir dist\win-x64
+      - name: Sign MSI (nếu có cert)
+        if: ${{ vars.MSI_CERT_THUMBPRINT != '' }}
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature installer\OrgInventoryAgent.msi
+          if ($sig.Status -ne 'Valid') {
+            & signtool sign /sha1 "${{ vars.MSI_CERT_THUMBPRINT }}" /fd sha256 /tr http://timestamp.digicert.com /td sha256 installer\OrgInventoryAgent.msi
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+            $h = (Get-FileHash installer\OrgInventoryAgent.msi -Algorithm SHA256).Hash.ToLower()
+            "$h  OrgInventoryAgent.msi" | Set-Content installer\OrgInventoryAgent.msi.sha256 -Encoding ascii
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            installer/OrgInventoryAgent.msi
+            installer/OrgInventoryAgent.msi.sha256
+          if-no-files-found: error
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+      - name: Install zig + cargo-zigbuild + packaging tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpm dpkg-dev zstd
+          pip install ziglang
+          cargo install --locked cargo-zigbuild
+      - name: Pin version
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          sed -i "s|^version = \".*\"|version = \"$V\"|" rust/Cargo.toml
+          sed -i "s|^Version:.*|Version: $V|" installer/linux/debian/control
+          sed -i "s|^Version:.*|Version:        $V|" installer/linux/rpm/orginventory.spec
+      - name: Build 4 RIDs (Rust)
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          ./installer/linux/build-linux-rust.sh dist
+      - name: Build deb + rpm + tarball + pacman + apk (Rust binaries)
+        run: |
+          AGENT_BIN="dist/linux-x64/OrgInventoryAgent" ./installer/linux/build-deb.sh linux-x64 dist
+          AGENT_BIN="dist/linux-x64/OrgInventoryAgent" ./installer/linux/build-rpm.sh linux-x64 dist
+          AGENT_BIN="dist/linux-x64/OrgInventoryAgent" ./installer/linux/build-tarball.sh linux-x64 dist
+          AGENT_BIN="dist/linux-arm64/OrgInventoryAgent" ./installer/linux/build-tarball.sh linux-arm64 dist
+          AGENT_BIN="dist/linux-x64/OrgInventoryAgent" ./installer/linux/build-pacman.sh linux-x64 dist
+          AGENT_BIN="dist/linux-musl-x64/OrgInventoryAgent" ./installer/linux/build-apk.sh linux-musl-x64 dist
+          AGENT_BIN="dist/linux-musl-arm64/OrgInventoryAgent" ./installer/linux/build-apk.sh linux-musl-arm64 dist
+      - name: Rename + checksum binaries
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          for RID in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64; do
+            mv "dist/$RID/OrgInventoryAgent" "dist/$RID/OrgInventoryAgent-$RID"
+            (cd "dist/$RID" && sha256sum "OrgInventoryAgent-$RID" > "OrgInventoryAgent-$RID.sha256")
+            echo "$V" > "dist/$RID/OrgInventoryAgent-$RID.version"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/
+          if-no-files-found: error
+
+  macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - name: Pin version
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          sed -i '' "s|^version = \".*\"|version = \"$V\"|" rust/Cargo.toml
+      - name: Build 2 RIDs + .pkg (Rust)
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          ./installer/macos/build-macos-rust.sh dist
+          for RID in osx-x64 osx-arm64; do
+            AGENT_BIN="dist/$RID/OrgInventoryAgent" ./installer/macos/build-pkg.sh "$RID" dist "$V"
+            mv "dist/$RID/OrgInventoryAgent" "dist/$RID/OrgInventoryAgent-$RID"
+            (cd "dist/$RID" && shasum -a 256 "OrgInventoryAgent-$RID" > "OrgInventoryAgent-$RID.sha256")
+            echo "$V" > "dist/$RID/OrgInventoryAgent-$RID.version"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: [version, windows, linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          merge-multiple: true
+          path: assets
+      - name: Stage release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp assets/OrgInventoryAgent.msi assets/OrgInventoryAgent.msi.sha256 release-assets/
+          for RID in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
+            cp "assets/$RID/OrgInventoryAgent-$RID" \
+               "assets/$RID/OrgInventoryAgent-$RID.sha256" \
+               "assets/$RID/OrgInventoryAgent-$RID.version" release-assets/
+          done
+          cp assets/orginventory-agent_*.deb assets/orginventory-agent_*.tar.gz release-assets/
+          find assets/rpm -name '*.rpm' -exec cp {} release-assets/ \;
+          cp assets/orginventory-agent-*.pkg.tar.zst release-assets/
+          cp assets/orginventory-agent-*.apk release-assets/
+          cp assets/orginventory-agent_*.pkg release-assets/
+          cp installer/macos/com.orginventory.agent.plist \
+             installer/macos/com.orginventory.agent.update.plist release-assets/
+          cp installer/macos/apply-update.sh release-assets/apply-update-macos.sh
+          cp installer/macos/install.sh release-assets/install-macos.sh
+          cp installer/install.sh installer/install.ps1 installer/install-both.ps1 \
+             installer/offline/install-offline.ps1 installer/offline/install-offline.cmd \
+             release-assets/
+          ls -la release-assets/
+      - name: Manifest agent-version.json
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          cat > release-assets/agent-version.json <<EOF
+          {"msi_version": "$V", "linux": {"linux-x64": "$V", "linux-arm64": "$V", "linux-musl-x64": "$V", "linux-musl-arm64": "$V"}, "osx": {"osx-x64": "$V", "osx-arm64": "$V"}, "velociraptor_msi_version": null}
+          EOF
+          cat release-assets/agent-version.json
+      - name: Create GitHub pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --target "${{ github.sha }}" \
+            --title "OrgInventory Agent Rust BETA ${{ needs.version.outputs.version }}" \
+            --generate-notes \
+            --prerelease \
+            release-assets/*
