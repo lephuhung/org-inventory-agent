@@ -21,13 +21,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      msi_version: ${{ steps.v.outputs.msi_version }}
+      rpm_version: ${{ steps.v.outputs.rpm_version }}
       tag: ${{ steps.v.outputs.tag }}
     steps:
       - id: v
         run: |
           V="${{ inputs.version }}"
           V="${V#v}"
+          # MSI ProductVersion chỉ nhận N.N.N numeric → cắt suffix prerelease.
+          # Lưu ý: 2 beta cùng phần numeric (1.4.0-beta.1 & -beta.2 → cùng 1.4.0)
+          # sẽ KHÔNG upgrade được qua MSI — gỡ bản cũ trước khi cài.
+          MSI_V="${V%%[-+~]*}"
+          # RPM spec Version không được chứa '-' → dùng '~' (sort trước release).
+          RPM_V="${V//-/~}"
           echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "msi_version=$MSI_V" >> "$GITHUB_OUTPUT"
+          echo "rpm_version=$RPM_V" >> "$GITHUB_OUTPUT"
           echo "tag=rust-beta-v$V" >> "$GITHUB_OUTPUT"
 
   windows:
@@ -49,8 +59,11 @@ jobs:
           (Get-Content $cargo -Raw) -replace '(?m)^version = "[^"]*"', "version = `"$v`"" |
             Set-Content $cargo -NoNewline -Encoding utf8
           $wxs = "installer/Product.wxs"
-          (Get-Content $wxs -Raw) -creplace 'Version="[\d.]+"', "Version=`"$v`"" |
+          $msiV = "${{ needs.version.outputs.msi_version }}"
+          (Get-Content $wxs -Raw) -creplace 'Version="[\d.]+"', "Version=`"$msiV`"" |
             Set-Content $wxs -NoNewline -Encoding utf8
+          # Version pin làm lock stale → regen workspace entries trước khi build --locked.
+          Set-Location rust; cargo update --workspace; Set-Location ..
       - name: Build exe + MSI
         shell: pwsh
         run: .\installer\build-windows-rust.ps1 -Msi -OutDir dist\win-x64
@@ -91,7 +104,9 @@ jobs:
           V="${{ needs.version.outputs.version }}"
           sed -i "s|^version = \".*\"|version = \"$V\"|" rust/Cargo.toml
           sed -i "s|^Version:.*|Version: $V|" installer/linux/debian/control
-          sed -i "s|^Version:.*|Version:        $V|" installer/linux/rpm/orginventory.spec
+          sed -i "s|^Version:.*|Version:        ${{ needs.version.outputs.rpm_version }}|" installer/linux/rpm/orginventory.spec
+          # Version pin làm lock stale → regen workspace entries trước khi build --locked.
+          (cd rust && cargo update --workspace)
       - name: Build 4 RIDs (Rust)
         run: |
           V="${{ needs.version.outputs.version }}"
@@ -131,6 +146,8 @@ jobs:
         run: |
           V="${{ needs.version.outputs.version }}"
           sed -i '' "s|^version = \".*\"|version = \"$V\"|" rust/Cargo.toml
+          # Version pin làm lock stale → regen workspace entries trước khi build --locked.
+          (cd rust && cargo update --workspace)
       - name: Build 2 RIDs + .pkg (Rust)
         run: |
           V="${{ needs.version.outputs.version }}"
