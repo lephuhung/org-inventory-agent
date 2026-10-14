@@ -34,7 +34,8 @@ jobs:
           # sẽ KHÔNG upgrade được qua MSI — gỡ bản cũ trước khi cài.
           MSI_V="${V%%[-+~]*}"
           # RPM spec Version không được chứa '-' → dùng '~' (sort trước release).
-          RPM_V="${V//-/~}"
+          # Phải escape: bash tilde-expands '~' trong replacement của ${V//-/~}.
+          RPM_V="${V//-/\~}"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "msi_version=$MSI_V" >> "$GITHUB_OUTPUT"
           echo "rpm_version=$RPM_V" >> "$GITHUB_OUTPUT"
