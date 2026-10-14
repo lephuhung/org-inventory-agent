@@ -12,6 +12,9 @@ on:
       version:
         description: "Version beta (vd 1.4.0-beta.1)"
         required: true
+  push:
+    tags:
+      - "rust-beta-v*"
 
 permissions:
   contents: write
@@ -28,6 +31,9 @@ jobs:
       - id: v
         run: |
           V="${{ inputs.version }}"
+          if [[ -z "$V" && "$GITHUB_REF" == refs/tags/rust-beta-v* ]]; then
+            V="${GITHUB_REF#refs/tags/rust-beta-v}"
+          fi
           V="${V#v}"
           # MSI ProductVersion chỉ nhận N.N.N numeric → cắt suffix prerelease.
           # Lưu ý: 2 beta cùng phần numeric (1.4.0-beta.1 & -beta.2 → cùng 1.4.0)
