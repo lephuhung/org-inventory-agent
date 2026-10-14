@@ -15,6 +15,7 @@ on:
   push:
     tags:
       - "rust-beta-v*"
+      - "v*"
 
 permissions:
   contents: write
@@ -27,12 +28,15 @@ jobs:
       msi_version: ${{ steps.v.outputs.msi_version }}
       rpm_version: ${{ steps.v.outputs.rpm_version }}
       tag: ${{ steps.v.outputs.tag }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
       - id: v
         run: |
           V="${{ inputs.version }}"
-          if [[ -z "$V" && "$GITHUB_REF" == refs/tags/rust-beta-v* ]]; then
-            V="${GITHUB_REF#refs/tags/rust-beta-v}"
+          if [[ -z "$V" ]]; then
+            V="${GITHUB_REF_NAME}"
+            V="${V#rust-beta-v}"
+            V="${V#v}"
           fi
           V="${V#v}"
           # MSI ProductVersion chỉ nhận N.N.N numeric → cắt suffix prerelease.
@@ -45,7 +49,15 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "msi_version=$MSI_V" >> "$GITHUB_OUTPUT"
           echo "rpm_version=$RPM_V" >> "$GITHUB_OUTPUT"
-          echo "tag=rust-beta-v$V" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Release chính thức: tag v* → KHÔNG phải prerelease để
+            # releases/latest trỏ vào (backend/install script dùng latest).
+            echo "tag=v$V" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=rust-beta-v$V" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
 
   windows:
     needs: version
@@ -211,14 +223,20 @@ jobs:
           {"msi_version": "$V", "linux": {"linux-x64": "$V", "linux-arm64": "$V", "linux-musl-x64": "$V", "linux-musl-arm64": "$V"}, "osx": {"osx-x64": "$V", "osx-arm64": "$V"}, "velociraptor_msi_version": null}
           EOF
           cat release-assets/agent-version.json
-      - name: Create GitHub pre-release
+      - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.version.outputs.tag }}
         run: |
+          PRE=""
+          TITLE="OrgInventory Agent $TAG"
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+            PRE="--prerelease"
+            TITLE="OrgInventory Agent Rust BETA ${{ needs.version.outputs.version }}"
+          fi
           gh release create "$TAG" \
             --target "${{ github.sha }}" \
-            --title "OrgInventory Agent Rust BETA ${{ needs.version.outputs.version }}" \
+            --title "$TITLE" \
             --generate-notes \
-            --prerelease \
+            $PRE \
             release-assets/*

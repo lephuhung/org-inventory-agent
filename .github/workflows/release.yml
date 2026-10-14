@@ -1,8 +1,8 @@
 name: release
 
+# Pipeline release .NET — giữ lại chạy TAY qua workflow_dispatch. Tag `v*`
+# giờ thuộc về rust-beta.yml (Rust agent thay thế .NET trong kênh release).
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       version:
