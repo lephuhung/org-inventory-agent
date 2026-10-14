@@ -131,6 +131,10 @@ jobs:
         run: |
           python -c "import json; d=json.load(open(r'$env:RUNNER_TEMP/inv.json')); e=d['envelope']; assert e['agent']['platform']=='windows', e; assert e['agent']['package_type']=='msi'; s=d['snapshot']; assert s.get('os_name'), s; print('inventory ok:', s.get('os_name'))"
           python -c "import json; d=json.load(open(r'$env:RUNNER_TEMP/sec.json')); assert 'update' in d and 'disk_encryption' in d, d.keys(); print('security ok:', d.get('windows_update_status'))"
+      - name: Setup .NET (WiX tool runtime)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
       - name: Build MSI (Rust exe)
         run: |
           ./installer/build-windows-rust.ps1 -Msi -OutDir dist/win-x64
