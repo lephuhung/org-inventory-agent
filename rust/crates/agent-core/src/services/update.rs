@@ -298,7 +298,10 @@ impl UpdateService {
         let log_path = self.update_dir.join("msi-install.log");
         let (endpoints, proxy) = {
             let cfg = self.config.lock().unwrap();
-            (cfg.endpoints.join(";"), cfg.http_proxy.clone().unwrap_or_default())
+            (
+                cfg.endpoints.join(";"),
+                cfg.http_proxy.clone().unwrap_or_default(),
+            )
         };
         let mut args = vec![
             "/i".to_string(),
@@ -314,7 +317,10 @@ impl UpdateService {
         }
         args.push("/l*v".into());
         args.push(log_path.to_string_lossy().into_owned());
-        match std::process::Command::new("msiexec.exe").args(&args).spawn() {
+        match std::process::Command::new("msiexec.exe")
+            .args(&args)
+            .spawn()
+        {
             Ok(_) => log::info!(
                 target: "UpdateService",
                 "Đã khởi chạy nâng cấp MSI v{version} — service sẽ restart trong giây lát."
