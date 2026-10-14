@@ -141,13 +141,18 @@ jobs:
       - name: MSI install/uninstall smoke
         run: |
           $msi = "installer/OrgInventoryAgent.msi"
-          Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "$env:RUNNER_TEMP/msi-install.log" -Wait
-          Start-Sleep -Seconds 3
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "$env:RUNNER_TEMP/msi-install.log" -Wait -PassThru
+          Write-Host "msiexec exit code: $($p.ExitCode)"
           $svc = Get-Service OrgInventoryAgent -ErrorAction SilentlyContinue
-          if (-not $svc) { throw "Service OrgInventoryAgent khong duoc dang ky" }
+          if ($p.ExitCode -ne 0 -or -not $svc) {
+            Write-Host "=== msi-install.log (tail) ==="
+            Get-Content "$env:RUNNER_TEMP/msi-install.log" -Tail 60
+            throw "MSI install that bai (exit=$($p.ExitCode), service=$svc)"
+          }
           Write-Host "Service status: $($svc.Status)"
           if (-not (Test-Path "$env:ProgramFiles/OrgInventory/OrgInventoryAgent.exe")) { throw "Thieu exe trong Program Files" }
-          Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart' -Wait
+          $u = Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart' -Wait -PassThru
+          Write-Host "uninstall exit code: $($u.ExitCode)"
       - uses: actions/upload-artifact@v4
         with:
           name: rust-windows
