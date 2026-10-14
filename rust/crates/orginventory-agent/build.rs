@@ -35,8 +35,7 @@ fn embed_windows_resources() {
         .map(|p| p.parse::<u64>().unwrap_or(0))
         .collect::<Vec<_>>();
     parts.resize(4, 0);
-    let numeric =
-        (parts[0] << 48) | (parts[1] << 32) | (parts[2] << 16) | parts[3];
+    let numeric = (parts[0] << 48) | (parts[1] << 32) | (parts[2] << 16) | parts[3];
     let ver4 = format!("{}.{}.{}.{}", parts[0], parts[1], parts[2], parts[3]);
 
     let mut res = winresource::WindowsResource::new();
