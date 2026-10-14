@@ -192,6 +192,8 @@ def make_handler(models, log_file, server_url):
         "/api/inventory": INVENTORY_RESPONSE,
         "/api/renew": RENEW_RESPONSE,
         "/api/agent/config": AGENT_CONFIG_RESPONSE,
+        # install.sh check_identity (CÀI LẠI giữ identity)
+        "/api/agent/whoami": {"machine_id": "3c2f1a4b-9d6e-4f8a-b2c1-0a1b2c3d4e5f", "status": "online"},
     }
 
     class Handler(BaseHTTPRequestHandler):

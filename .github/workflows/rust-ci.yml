@@ -1,0 +1,57 @@
+name: rust-ci
+
+on:
+  push:
+    paths: ["rust/**", "installer/linux/build-linux-rust.sh", ".github/workflows/rust-ci.yml"]
+  pull_request:
+    paths: ["rust/**", "installer/linux/build-linux-rust.sh", ".github/workflows/rust-ci.yml"]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  build-linux:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Install zig + cargo-zigbuild
+        run: |
+          pip install ziglang
+          cargo install --locked cargo-zigbuild
+      - name: Build 4 RIDs
+        run: |
+          ./installer/linux/build-linux-rust.sh dist
+          for RID in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64; do
+            mv "dist/$RID/OrgInventoryAgent" "dist/$RID/OrgInventoryAgent-$RID"
+            (cd "dist/$RID" && sha256sum "OrgInventoryAgent-$RID" > "OrgInventoryAgent-$RID.sha256")
+          done
+      - name: Smoke test (x64)
+        run: |
+          dist/linux-x64/OrgInventoryAgent-linux-x64 --version
+          dist/linux-x64/OrgInventoryAgent-linux-x64 --data-dir "$RUNNER_TEMP/oi" --print-fingerprint
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-linux
+          path: dist/*/OrgInventoryAgent-*
