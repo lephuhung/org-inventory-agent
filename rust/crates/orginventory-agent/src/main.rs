@@ -1,4 +1,4 @@
-//! OrgInventory Agent — Linux entry point (port of OrgInventoryAgent.Linux/Program.cs).
+//! OrgInventory Agent — Linux/macOS entry point (port of OrgInventoryAgent.{Linux,MacOS}/Program.cs).
 
 use agent_core::api::ApiClient;
 use agent_core::cli::CliArgs;
@@ -11,7 +11,15 @@ use agent_core::services::{
 };
 use agent_core::state::AgentState;
 use agent_core::{identity, paths, SharedConfig, SharedState, APP_NAME, VERSION};
-use collectors_linux::LinuxInventoryProvider;
+#[cfg(target_os = "linux")]
+use collectors_linux::{self as platform, LinuxInventoryProvider as PlatformProvider};
+#[cfg(target_os = "macos")]
+use collectors_macos::{self as platform, MacosInventoryProvider as PlatformProvider};
+
+#[cfg(target_os = "macos")]
+const PLATFORM_TITLE: &str = "macOS Agent";
+#[cfg(not(target_os = "macos"))]
+const PLATFORM_TITLE: &str = "Linux Agent";
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +27,7 @@ const ABOUT: &str = include_str!("about.txt");
 
 fn help() -> String {
     format!(
-        "OrgInventoryAgent v{VERSION} — Linux Agent
+        "OrgInventoryAgent v{VERSION} — {PLATFORM_TITLE}
 Sử dụng: OrgInventoryAgent [tùy chọn]
   --data-dir <path>        Thư mục dữ liệu (config/cache/log)
   --config <path>          File config.json (mặc định /etc/orginventory/config.json)
@@ -75,7 +83,7 @@ fn build_runtime(config: AgentConfig) -> Runtime {
         api.clone(),
         keystore.clone(),
         state.clone(),
-        Arc::new(collectors_linux::fingerprint::collect),
+        Arc::new(platform::fingerprint::collect),
     ));
     let cache = Arc::new(OfflineCache::open(&paths::cache_db_file()));
     let inventory = Arc::new(InventoryService::new(
@@ -83,7 +91,7 @@ fn build_runtime(config: AgentConfig) -> Runtime {
         api.clone(),
         enroll.clone(),
         cache.clone(),
-        Arc::new(LinuxInventoryProvider),
+        Arc::new(PlatformProvider),
         state.clone(),
     ));
     Runtime {
@@ -161,15 +169,15 @@ async fn run() -> i32 {
         agent_core::logging::init(None, true);
         use agent_core::payload::InventoryProvider;
         if cli.print_inventory {
-            let p = LinuxInventoryProvider;
+            let p = PlatformProvider;
             println!(
                 "{}",
                 pretty(&json!({ "envelope": p.envelope(), "snapshot": p.snapshot() }))
             );
         } else if cli.print_security {
-            println!("{}", pretty(&collectors_linux::security::collect()));
+            println!("{}", pretty(&platform::security::collect()));
         } else {
-            println!("{}", pretty(&collectors_linux::fingerprint::collect()));
+            println!("{}", pretty(&platform::fingerprint::collect()));
         }
         return 0;
     }

@@ -67,9 +67,35 @@ fn is_up_non_loopback(name: &str, flags: nix::net::if_::InterfaceFlags) -> bool 
     flags.contains(InterfaceFlags::IFF_UP) && flags.contains(InterfaceFlags::IFF_RUNNING)
 }
 
+#[cfg(not(target_os = "macos"))]
 fn read_mac(name: &str) -> Option<String> {
     let raw = std::fs::read_to_string(format!("/sys/class/net/{name}/address")).ok()?;
     format_mac(raw.trim())
+}
+
+/// macOS has no /sys: the MAC comes from the AF_LINK entry of getifaddrs.
+#[cfg(target_os = "macos")]
+fn read_mac(name: &str) -> Option<String> {
+    let addrs = nix::ifaddrs::getifaddrs().ok()?;
+    for a in addrs {
+        if a.interface_name != name {
+            continue;
+        }
+        if let Some(mac) = a
+            .address
+            .as_ref()
+            .and_then(|s| s.as_link_addr())
+            .and_then(|l| l.addr())
+        {
+            let raw = mac
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(":");
+            return format_mac(&raw);
+        }
+    }
+    None
 }
 
 /// "aa:bb:cc:dd:ee:ff" -> "AA-BB-CC-DD-EE-FF" (.NET PhysicalAddress formatting).

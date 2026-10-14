@@ -79,6 +79,14 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
 }
 
 pub fn current_rid() -> String {
+    if cfg!(target_os = "macos") {
+        return if std::env::consts::ARCH == "aarch64" {
+            "osx-arm64"
+        } else {
+            "osx-x64"
+        }
+        .into();
+    }
     let musl = ["/lib", "/usr/lib"].iter().any(|d| {
         std::fs::read_dir(d).is_ok_and(|rd| {
             rd.flatten().any(|e| {
@@ -361,6 +369,11 @@ impl UpdateService {
 }
 
 fn find_updater_unit() -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        // launchd WatchPaths on update.pending (com.orginventory.agent.update).
+        let p = Path::new("/Library/LaunchDaemons/com.orginventory.agent.update.plist");
+        return p.exists().then(|| p.to_path_buf());
+    }
     [
         "/etc/systemd/system",
         "/usr/lib/systemd/system",

@@ -24,11 +24,16 @@ PKGROOT="$OUT/pkgroot-$RID"
 rm -rf "$PKGROOT"
 mkdir -p "$PKGROOT/opt/orginventory" "$PKGROOT/Library/LaunchDaemons"
 
-dotnet publish "$HERE/../../macos/src/OrgInventoryAgent.MacOS/OrgInventoryAgent.MacOS.csproj" \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:EnableCompressionInSingleFile=false \
-  -o "$PKGROOT/opt/orginventory"
+# AGENT_BIN=<path> → đóng gói binary build sẵn (Rust, build-macos-rust.sh) thay vì dotnet publish.
+if [[ -n "${AGENT_BIN:-}" ]]; then
+    install -m 0755 "$AGENT_BIN" "$PKGROOT/opt/orginventory/OrgInventoryAgent"
+else
+    dotnet publish "$HERE/../../macos/src/OrgInventoryAgent.MacOS/OrgInventoryAgent.MacOS.csproj" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=true \
+      -p:EnableCompressionInSingleFile=false \
+      -o "$PKGROOT/opt/orginventory"
+fi
 
 printf '%s\n' "$VERSION" > "$PKGROOT/opt/orginventory/VERSION"
 cp "$HERE/apply-update.sh" "$PKGROOT/opt/orginventory/"

@@ -219,6 +219,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "collectors-macos"
+version = "1.3.1"
+dependencies = [
+ "agent-core",
+ "hex",
+ "log",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "compression-codecs"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -967,6 +978,7 @@ dependencies = [
  "agent-core",
  "anyhow",
  "collectors-linux",
+ "collectors-macos",
  "log",
  "serde",
  "serde_json",
