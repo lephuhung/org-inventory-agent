@@ -26,11 +26,16 @@ rm -rf "$PKGROOT"
 # Arch: units vào /usr/lib/systemd/system (khác /etc của install script thủ công).
 mkdir -p "$PKGROOT/opt/orginventory" "$PKGROOT/etc/orginventory" "$PKGROOT/usr/lib/systemd/system"
 
-dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:EnableCompressionInSingleFile=false \
-  -o "$PKGROOT/opt/orginventory" -p:ApplicationIcon=
+# AGENT_BIN=<path> → đóng gói binary build sẵn (Rust) thay vì dotnet publish.
+if [[ -n "${AGENT_BIN:-}" ]]; then
+    install -m 0755 "$AGENT_BIN" "$PKGROOT/opt/orginventory/OrgInventoryAgent"
+else
+    dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=true \
+      -p:EnableCompressionInSingleFile=false \
+      -o "$PKGROOT/opt/orginventory" -p:ApplicationIcon=
+fi
 
 printf '%s\n' "$VERSION" > "$PKGROOT/opt/orginventory/VERSION"
 cp "$HERE/apply-update.sh" "$PKGROOT/opt/orginventory/"

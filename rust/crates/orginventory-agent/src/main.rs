@@ -1,4 +1,5 @@
-//! OrgInventory Agent — Linux/macOS entry point (port of OrgInventoryAgent.{Linux,MacOS}/Program.cs).
+//! OrgInventory Agent — entry point cho Linux/macOS/Windows
+//! (port of OrgInventoryAgent.{Linux,MacOS,Windows}/Program.cs).
 
 use agent_core::api::ApiClient;
 use agent_core::cli::CliArgs;
@@ -15,11 +16,24 @@ use agent_core::{identity, paths, SharedConfig, SharedState, APP_NAME, VERSION};
 use collectors_linux::{self as platform, LinuxInventoryProvider as PlatformProvider};
 #[cfg(target_os = "macos")]
 use collectors_macos::{self as platform, MacosInventoryProvider as PlatformProvider};
+#[cfg(target_os = "windows")]
+use collectors_windows::{
+    self as platform, provider::WindowsInventoryProvider as PlatformProvider,
+};
 
 #[cfg(target_os = "macos")]
 const PLATFORM_TITLE: &str = "macOS Agent";
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+const PLATFORM_TITLE: &str = "Windows Agent";
+#[cfg(target_os = "linux")]
 const PLATFORM_TITLE: &str = "Linux Agent";
+
+#[cfg(windows)]
+mod service;
+
+/// Kênh STOP mà Windows service handler báo về `shutdown_signal()`.
+#[cfg(windows)]
+static STOP_TX: std::sync::OnceLock<tokio::sync::watch::Sender<bool>> = std::sync::OnceLock::new();
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 
@@ -38,6 +52,9 @@ Sử dụng: OrgInventoryAgent [tùy chọn]
   --send-inventory         Gửi inventory 1 lần rồi exit (tương đương --once)
   --check-update           Kiểm tra phiên bản mới trên release (không tải) rồi exit
   --update-now             Kiểm tra, tải và áp dụng bản mới ngay rồi exit
+  --export-bundle <zip>    Xuất gói dữ liệu mã hóa cho máy cách ly (cần server_public_key.pem)
+  --server-key <path>      Đường dẫn server_public_key.pem cho --export-bundle
+  --org-id <guid>          Gán org cho máy cách ly khi --export-bundle
   --print-config           In cấu hình hiện tại
   --print-inventory        In payload inventory v4 đầy đủ
   --print-security         In security posture
@@ -119,9 +136,28 @@ impl Runtime {
     }
 }
 
+fn main() {
+    // Windows: không tham số → thử StartServiceCtrlDispatcher (SCM).
+    // Lỗi 1063 (ERROR_FAILED_SERVICE_CONTROLLER_CONNECT) = chạy console.
+    #[cfg(windows)]
+    if std::env::args_os().len() == 1 {
+        match service::dispatch() {
+            Ok(()) => return,
+            Err(e) => {
+                let console = matches!(&e, windows_service::Error::Winapi(io)
+                    if io.raw_os_error() == Some(1063));
+                if !console {
+                    eprintln!("Windows service dispatcher lỗi: {e}");
+                }
+            }
+        }
+    }
+    std::process::exit(run_main());
+}
+
 #[tokio::main]
-async fn main() {
-    std::process::exit(run().await);
+async fn run_main() -> i32 {
+    run().await
 }
 
 async fn run() -> i32 {
@@ -198,6 +234,9 @@ async fn run() -> i32 {
 
     agent_core::logging::init(Some(&paths::logs_dir()), true);
 
+    if cli.export_bundle.is_some() {
+        return run_export_bundle(&cli, config);
+    }
     if cli.check_update || cli.update_now {
         return run_update(config, cli.update_now).await;
     }
@@ -205,6 +244,25 @@ async fn run() -> i32 {
         return run_once(config).await;
     }
     run_service(config, cli.config_path).await
+}
+
+/// `--export-bundle <zip>` — xuất gói mã hóa cho máy cách ly, exit code theo .NET.
+fn run_export_bundle(cli: &CliArgs, mut config: AgentConfig) -> i32 {
+    let keystore = KeyStore::in_data_dir();
+    let p = PlatformProvider;
+    let input = agent_core::bundle::BundleInput {
+        output_zip: std::path::Path::new(cli.export_bundle.as_deref().unwrap()),
+        server_key_path: cli.server_key.as_deref().map(std::path::Path::new),
+        org_id: cli.org_id.as_deref(),
+        fingerprint: platform::fingerprint::collect(),
+        spec: agent_core::payload::InventoryProvider::snapshot(&p),
+        hostname: agent_core::hostname(),
+    };
+    if agent_core::bundle::export_bundle(&input, &mut config, &keystore) {
+        0
+    } else {
+        1
+    }
 }
 
 async fn run_update(config: AgentConfig, apply: bool) -> i32 {
@@ -311,18 +369,38 @@ async fn run_service(config: AgentConfig, config_path: Option<String>) -> i32 {
         Err(e) => log::warn!(target: "Startup", "Không khởi tạo được UpdateService: {e}"),
     }
 
-    use tokio::signal::unix::{signal, SignalKind};
-    let mut term = match signal(SignalKind::terminate()) {
-        Ok(s) => s,
-        Err(_) => {
-            let _ = tokio::signal::ctrl_c().await;
-            return 0;
-        }
-    };
-    tokio::select! {
-        _ = term.recv() => {}
-        _ = tokio::signal::ctrl_c() => {}
-    }
+    shutdown_signal().await;
     log::info!(target: "Startup", "Nhận tín hiệu dừng — thoát.");
     0
+}
+
+/// Unix: SIGTERM hoặc Ctrl+C. Windows: SCM STOP/SHUTDOWN (qua service.rs) hoặc Ctrl+C.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = term.recv() => {}
+                    _ = tokio::signal::ctrl_c() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Some(tx) = STOP_TX.get() {
+            let mut rx = tx.subscribe();
+            tokio::select! {
+                _ = async { while rx.changed().await.is_ok() { if *rx.borrow() { break; } } } => {}
+                _ = tokio::signal::ctrl_c() => {}
+            }
+        } else {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    }
 }

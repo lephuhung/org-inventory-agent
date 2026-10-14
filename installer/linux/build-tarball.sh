@@ -25,11 +25,16 @@ ROOT="$OUT/tarroot-$RID/orginventory-agent"
 rm -rf "$OUT/tarroot-$RID"
 mkdir -p "$ROOT/opt" "$ROOT/systemd"
 
-dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:EnableCompressionInSingleFile=false \
-  -o "$ROOT/opt" -p:ApplicationIcon=
+# AGENT_BIN=<path> → đóng gói binary build sẵn (Rust) thay vì dotnet publish.
+if [[ -n "${AGENT_BIN:-}" ]]; then
+    install -m 0755 "$AGENT_BIN" "$ROOT/opt/OrgInventoryAgent"
+else
+    dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=true \
+      -p:EnableCompressionInSingleFile=false \
+      -o "$ROOT/opt" -p:ApplicationIcon=
+fi
 
 printf '%s\n' "$VERSION" > "$ROOT/opt/VERSION"
 cp "$HERE/apply-update.sh" "$ROOT/opt/apply-update.sh"

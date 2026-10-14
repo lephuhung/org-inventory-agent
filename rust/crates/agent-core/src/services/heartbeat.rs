@@ -38,6 +38,7 @@ pub fn is_identity_rejected(detail: Option<&str>) -> bool {
     })
 }
 
+#[cfg(unix)]
 fn uptime_sec() -> i64 {
     std::fs::read_to_string("/proc/uptime")
         .ok()
@@ -48,6 +49,15 @@ fn uptime_sec() -> i64 {
         })
         .map(|f| f as i64)
         .unwrap_or(0)
+}
+
+/// Windows: GetTickCount64 (ms kể từ boot) — không cần crate ngoài.
+#[cfg(windows)]
+fn uptime_sec() -> i64 {
+    unsafe extern "C" {
+        fn GetTickCount64() -> u64;
+    }
+    (unsafe { GetTickCount64() } / 1000) as i64
 }
 
 impl HeartbeatService {
@@ -102,7 +112,7 @@ impl HeartbeatService {
     }
 
     async fn send(&self) -> bool {
-        let ip = tokio::task::spawn_blocking(crate::posix::network::primary_ip)
+        let ip = tokio::task::spawn_blocking(crate::primary_ip)
             .await
             .unwrap_or_else(|_| "127.0.0.1".into());
         let payload = json!({

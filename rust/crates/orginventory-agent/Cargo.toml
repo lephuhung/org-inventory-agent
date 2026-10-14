@@ -22,3 +22,7 @@ collectors-linux.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 collectors-macos.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+collectors-windows.workspace = true
+windows-service.workspace = true

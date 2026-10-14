@@ -28,11 +28,16 @@ CTRL="$WORK/control"
 mkdir -p "$DATA/opt/orginventory" "$DATA/etc/orginventory" "$DATA/etc/init.d" \
          "$DATA/etc/periodic/15min" "$CTRL"
 
-dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:EnableCompressionInSingleFile=false \
-  -o "$DATA/opt/orginventory" -p:ApplicationIcon=
+# AGENT_BIN=<path> → đóng gói binary build sẵn (Rust) thay vì dotnet publish.
+if [[ -n "${AGENT_BIN:-}" ]]; then
+    install -m 0755 "$AGENT_BIN" "$DATA/opt/orginventory/OrgInventoryAgent"
+else
+    dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=true \
+      -p:EnableCompressionInSingleFile=false \
+      -o "$DATA/opt/orginventory" -p:ApplicationIcon=
+fi
 
 printf '%s\n' "$VERSION" > "$DATA/opt/orginventory/VERSION"
 cp "$HERE/alpine/apply-update.sh" "$DATA/opt/orginventory/apply-update.sh"

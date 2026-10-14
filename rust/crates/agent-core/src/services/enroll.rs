@@ -200,6 +200,9 @@ impl EnrollCoordinator {
             let _ = std::fs::write(crate::paths::ca_cert_file(), ca);
         }
         crate::save_config(&self.config);
+        // AG-P2-01 (Windows): xóa bootstrap token khỏi registry sau enroll thành công.
+        #[cfg(windows)]
+        crate::win_bootstrap::clear_bootstrap_token();
         self.api.reset().await;
         log::info!(
             target: "EnrollCoordinator",

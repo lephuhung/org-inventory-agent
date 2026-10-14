@@ -14,6 +14,7 @@ pub const PENDING_MARKER: &str = "update.pending";
 const INITIAL_DELAY: Duration = Duration::from_secs(90);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
+#[cfg(unix)]
 const APPLY_SCRIPT: &str = "/opt/orginventory/apply-update.sh";
 
 // ---- UpdateManifest -------------------------------------------------------------------------
@@ -79,6 +80,14 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
 }
 
 pub fn current_rid() -> String {
+    if cfg!(target_os = "windows") {
+        return if std::env::consts::ARCH == "aarch64" {
+            "win-arm64"
+        } else {
+            "win-x64"
+        }
+        .into();
+    }
     if cfg!(target_os = "macos") {
         return if std::env::consts::ARCH == "aarch64" {
             "osx-arm64"
@@ -251,8 +260,11 @@ impl UpdateService {
                 return Ok(false);
             }
             std::fs::rename(&tmp, &staged)?;
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755));
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755));
+            }
             std::fs::write(self.update_dir.join(format!("{staged_file}.version")), format!("{latest}\n"))?;
             std::fs::write(self.update_dir.join(format!("{staged_file}.sha256")), format!("{actual}  {staged_file}\n"))?;
             Ok(true)
@@ -269,10 +281,44 @@ impl UpdateService {
         }
         let size = std::fs::metadata(&staged).map(|m| m.len()).unwrap_or(0);
         log::info!(target: "UpdateService", "Đã tải + verify {staged_file} v{latest} ({size} bytes).");
-        self.stage_linux_update(&latest);
+        self.apply_staged(&staged, &latest);
         true
     }
 
+    /// Windows: stage MSI rồi spawn `msiexec /i /qn` tách biệt — port của
+    /// `UpdateService.StartWindowsUpgrade`. MSI (MajorUpgrade + ServiceControl
+    /// Stop=both/Start=install) tự thay file + restart service; không dùng pending marker.
+    #[cfg(windows)]
+    fn apply_staged(&self, msi: &Path, version: &str) {
+        let log_path = self.update_dir.join("msi-install.log");
+        match std::process::Command::new("msiexec.exe")
+            .args([
+                "/i",
+                &msi.to_string_lossy(),
+                "/qn",
+                "/norestart",
+                "/l*v",
+                &log_path.to_string_lossy(),
+            ])
+            .spawn()
+        {
+            Ok(_) => log::info!(
+                target: "UpdateService",
+                "Đã khởi chạy nâng cấp MSI v{version} — service sẽ restart trong giây lát."
+            ),
+            Err(e) => log::warn!(
+                target: "UpdateService",
+                "Không chạy được msiexec — bản {version} giữ ở staging: {e}"
+            ),
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn apply_staged(&self, _msi: &Path, version: &str) {
+        self.stage_linux_update(version);
+    }
+
+    #[cfg(not(windows))]
     fn stage_linux_update(&self, version: &str) {
         if let Err(e) = std::fs::write(self.update_dir.join(PENDING_MARKER), format!("{version}\n"))
         {
@@ -283,6 +329,7 @@ impl UpdateService {
             log::info!(target: "UpdateService", "Đã stage v{version} — orginventory-agent-update.path sẽ áp dụng.");
             return;
         }
+        #[cfg(unix)]
         if nix::unistd::geteuid().is_root() && Path::new(APPLY_SCRIPT).exists() {
             match std::process::Command::new("/bin/bash")
                 .arg(APPLY_SCRIPT)
@@ -368,6 +415,7 @@ impl UpdateService {
     }
 }
 
+#[cfg(not(windows))]
 fn find_updater_unit() -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
         // launchd WatchPaths on update.pending (com.orginventory.agent.update).

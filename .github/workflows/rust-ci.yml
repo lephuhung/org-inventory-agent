@@ -2,9 +2,9 @@ name: rust-ci
 
 on:
   push:
-    paths: ["rust/**", "installer/linux/build-linux-rust.sh", "installer/macos/**", ".github/workflows/rust-ci.yml"]
+    paths: ["rust/**", "installer/linux/build-linux-rust.sh", "installer/macos/**", "installer/Product.wxs", "installer/build-msi.ps1", "installer/build-windows-rust.ps1", ".github/workflows/rust-ci.yml"]
   pull_request:
-    paths: ["rust/**", "installer/linux/build-linux-rust.sh", "installer/macos/**", ".github/workflows/rust-ci.yml"]
+    paths: ["rust/**", "installer/linux/build-linux-rust.sh", "installer/macos/**", "installer/Product.wxs", "installer/build-msi.ps1", "installer/build-windows-rust.ps1", ".github/workflows/rust-ci.yml"]
   workflow_dispatch:
 
 jobs:
@@ -100,3 +100,64 @@ jobs:
           path: |
             dist/*/OrgInventoryAgent-*
             dist/*.pkg
+
+  build-windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Test + clippy (native Windows)
+        working-directory: rust
+        run: |
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+      - name: Build exe + smoke
+        working-directory: rust
+        run: |
+          cargo build --release --locked -p orginventory-agent --target x86_64-pc-windows-msvc
+          $B = "target/x86_64-pc-windows-msvc/release/OrgInventoryAgent.exe"
+          & $B --version
+          & $B --data-dir "$env:RUNNER_TEMP/oi" --print-fingerprint
+          & $B --data-dir "$env:RUNNER_TEMP/oi" --print-inventory > "$env:RUNNER_TEMP/inv.json"
+          & $B --data-dir "$env:RUNNER_TEMP/oi" --print-security > "$env:RUNNER_TEMP/sec.json"
+      - name: Validate inventory JSON
+        run: |
+          python -c "import json; d=json.load(open(r'$env:RUNNER_TEMP/inv.json')); e=d['envelope']; assert e['agent']['platform']=='windows', e; assert e['agent']['package_type']=='msi'; s=d['snapshot']; assert s.get('os_name'), s; print('inventory ok:', s.get('os_name'))"
+          python -c "import json; d=json.load(open(r'$env:RUNNER_TEMP/sec.json')); assert 'update' in d and 'disk_encryption' in d, d.keys(); print('security ok:', d.get('windows_update_status'))"
+      - name: Setup .NET (WiX tool runtime)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+      - name: Build MSI (Rust exe)
+        run: |
+          ./installer/build-windows-rust.ps1 -Msi -OutDir dist/win-x64
+      - name: MSI install/uninstall smoke
+        run: |
+          $msi = (Resolve-Path "installer/OrgInventoryAgent.msi").Path
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "$env:RUNNER_TEMP/msi-install.log" -Wait -PassThru
+          Write-Host "msiexec exit code: $($p.ExitCode)"
+          $svc = Get-Service OrgInventoryAgent -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0 -or -not $svc) {
+            Write-Host "=== msi-install.log (tail) ==="
+            Get-Content "$env:RUNNER_TEMP/msi-install.log" -Tail 60
+            throw "MSI install that bai (exit=$($p.ExitCode), service=$svc)"
+          }
+          Write-Host "Service status: $($svc.Status)"
+          if (-not (Test-Path "$env:ProgramFiles/OrgInventory/OrgInventoryAgent.exe")) { throw "Thieu exe trong Program Files" }
+          $u = Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart' -Wait -PassThru
+          Write-Host "uninstall exit code: $($u.ExitCode)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-windows
+          path: |
+            dist/win-x64/OrgInventoryAgent.exe
+            dist/win-x64/OrgInventoryAgent.exe.sha256
+            installer/OrgInventoryAgent.msi
+            installer/OrgInventoryAgent.msi.sha256

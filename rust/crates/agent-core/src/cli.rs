@@ -18,6 +18,12 @@ pub struct CliArgs {
     pub check_update: bool,
     pub update_now: bool,
     pub show_help: bool,
+    /// Offline bundle export (air-gap): `--export-bundle <zip>`
+    pub export_bundle: Option<String>,
+    /// `--server-key <pem>` — server_public_key.pem cho export-bundle.
+    pub server_key: Option<String>,
+    /// `--org-id <guid>` — gán org cho máy cách ly khi export-bundle.
+    pub org_id: Option<String>,
 }
 
 impl CliArgs {
@@ -45,6 +51,9 @@ impl CliArgs {
                 "--send-inventory" => cli.send_inventory = true,
                 "--check-update" => cli.check_update = true,
                 "--update-now" => cli.update_now = true,
+                "--export-bundle" => cli.export_bundle = it.next(),
+                "--server-key" => cli.server_key = it.next(),
+                "--org-id" => cli.org_id = it.next(),
                 "--help" | "-h" => cli.show_help = true,
                 other => eprintln!("[warn] Bỏ qua tham số không biết: {other}"),
             }
