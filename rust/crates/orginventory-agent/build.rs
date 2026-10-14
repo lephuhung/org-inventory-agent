@@ -8,9 +8,20 @@
 //!
 //! Version lấy từ CARGO_PKG_VERSION (CI pin qua workspace Cargo.toml mỗi release),
 //! suffix prerelease bị cắt giống MSI_V trong rust-beta.yml.
+//!
+//! `winresource` chỉ là build-dep của target windows → toàn bộ code phải nằm sau
+//! `#[cfg(windows)]` (host-gate), nếu không build.rs fail compile trên host
+//! Linux/macOS (crate không nằm trong dep set của các target đó).
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    #[cfg(windows)]
+    embed_windows_resources();
+}
+
+#[cfg(windows)]
+fn embed_windows_resources() {
+    // build.rs compile cho HOST — cross-build windows từ host khác vẫn cần check.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
@@ -40,7 +51,7 @@ fn main() {
         .set("OriginalFilename", "OrgInventoryAgent.exe")
         .set("InternalName", "OrgInventoryAgent");
 
-    // Icon exe (cùng icon ARP trong MSI) — optional: build vẫn pass khi thiếu file.
+    // Icon exe (cùng icon ARP trong MSI) — optional: build vẫn pass nếu thiếu file.
     let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../Assets/agent.ico");
     println!("cargo:rerun-if-changed={}", icon.display());
     if icon.exists() {
