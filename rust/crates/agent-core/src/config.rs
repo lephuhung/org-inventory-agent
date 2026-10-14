@@ -524,7 +524,7 @@ mod tests {
         )
         .unwrap();
         let pc = PosixConfig::new(Some(boot.to_str().unwrap()), state.clone());
-        let mut cfg = pc.load();
+        let cfg = pc.load();
         assert_eq!(cfg.endpoints, vec!["https://new"]);
         assert_eq!(cfg.token.as_deref(), Some("fresh"));
     }
