@@ -34,6 +34,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"
 wmi = "0.14"
 winreg = "0.55"
 windows-service = "0.7"
+# build-dep của orginventory-agent: nhúng VERSIONINFO (MSI cần File.Version để upgrade)
+winresource = { version = "0.1.31", default-features = false }
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "sha256", "pem"] }
 aes-gcm = "0.10"
 rsa = "0.9"

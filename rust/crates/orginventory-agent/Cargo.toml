@@ -26,3 +26,6 @@ collectors-macos.workspace = true
 [target.'cfg(windows)'.dependencies]
 collectors-windows.workspace = true
 windows-service.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+winresource.workspace = true

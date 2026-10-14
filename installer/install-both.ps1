@@ -185,6 +185,7 @@ $oiInstalled = $false
 $oiSvc = $null
 $oiProductCode = $null
 $oiInstalledVersion = $null
+$oiBrokenInstall = $false
 if (-not $SkipOrgInventory) {
     $oiSvc = Get-Service -Name "OrgInventoryAgent" -ErrorAction SilentlyContinue
     $oiInfo = Get-MsiProductCode "*OrgInventory*"
@@ -197,6 +198,15 @@ if (-not $SkipOrgInventory) {
             Write-Info "  Service: $($oiSvc.Status)"
         } else {
             Write-Warn "  Service khong chay (se khoi dong lai)"
+        }
+        # Cai dat HONG: product da dang ky trong ARP nhung thieu exe hoac service
+        # (xay ra khi major-upgrade disallow component "higher versioned keyfile" —
+        # MSI dang ky version moi nhung khong cai file). Phai go registration cu
+        # + cai lai MSI, Case 2 khong tu khoi phuc duoc.
+        $oiExeExists = Test-Path "$env:ProgramFiles\OrgInventory\OrgInventoryAgent.exe"
+        if (-not $oiExeExists -or -not $oiSvc) {
+            $oiBrokenInstall = $true
+            Write-Warn "  Cai dat khong day du$(if (-not $oiExeExists) { ' (thieu exe)' } elseif (-not $oiSvc) { ' (thieu service)' }) -> se cai lai MSI."
         }
     } else {
         Write-Info "OrgInventory Agent chua duoc cai"
@@ -261,9 +271,9 @@ if (-not $SkipOrgInventory) {
         }
     }
 
-    if (-not $oiInstalled -or $ForceReinstall -or $oiUpgradeAvailable) {
-        if ($ForceReinstall -and $oiInstalled) {
-            Write-Info "ForceReinstall = true -> go MSI cu truoc..."
+    if (-not $oiInstalled -or $ForceReinstall -or $oiUpgradeAvailable -or $oiBrokenInstall) {
+        if (($ForceReinstall -or $oiBrokenInstall) -and $oiInstalled) {
+            Write-Info "$(if ($oiBrokenInstall -and -not $ForceReinstall) { 'Cai dat khong day du' } else { 'ForceReinstall = true' }) -> go MSI cu truoc..."
             if ($oiProductCode) {
                 Start-Process msiexec.exe -ArgumentList @('/x', "$oiProductCode", '/qn', '/norestart') -Wait
                 Start-Sleep -Seconds 5

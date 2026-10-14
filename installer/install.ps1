@@ -77,6 +77,20 @@ foreach ($root in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
     }
 }
 if ($productCode) {
+    # Cai dat HONG: product da dang ky trong ARP nhung thieu exe hoac service
+    # (xay ra khi major-upgrade disallow component "higher versioned keyfile" —
+    # MSI dang ky version moi nhung khong cai file). Phai go registration cu +
+    # cai lai MSI, khong the chi merge config + restart service.
+    $oiSvc = Get-Service -Name 'OrgInventoryAgent' -ErrorAction SilentlyContinue
+    $oiExeExists = Test-Path "$env:ProgramFiles\OrgInventory\OrgInventoryAgent.exe"
+    $brokenInstall = (-not $oiExeExists) -or (-not $oiSvc)
+    if ($brokenInstall) {
+        Write-Host 'Cai dat hien tai khong day du (thieu exe/service) — go registration cu va cai lai MSI.' -ForegroundColor Yellow
+        Start-Process msiexec.exe -ArgumentList @('/x', "$productCode", '/qn', '/norestart') -Wait
+        $productCode = $null
+    }
+}
+if ($productCode) {
     $serverVersion = $null
     try {
         $manifest = Invoke-RestMethod -Uri "$baseUrl/download/agent-version" -UseBasicParsing -TimeoutSec 30
