@@ -27,11 +27,17 @@ BUILDDIR="$OUT/build-$RID"
 rm -rf "$BUILDDIR"
 mkdir -p "$BUILDDIR/orginventory/opt" "$BUILDDIR/orginventory/systemd"
 
-dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:EnableCompressionInSingleFile=false \
-  -o "$BUILDDIR/orginventory/opt/orginventory" -p:ApplicationIcon=
+# AGENT_BIN=<path> → đóng gói binary build sẵn (Rust) thay vì dotnet publish.
+if [[ -n "${AGENT_BIN:-}" ]]; then
+    mkdir -p "$BUILDDIR/orginventory/opt/orginventory"
+    install -m 0755 "$AGENT_BIN" "$BUILDDIR/orginventory/opt/orginventory/OrgInventoryAgent"
+else
+    dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=true \
+      -p:EnableCompressionInSingleFile=false \
+      -o "$BUILDDIR/orginventory/opt/orginventory" -p:ApplicationIcon=
+fi
 
 # VERSION cạnh binary — install.sh dùng để so sánh manifest auto-upgrade
 printf '%s\n' "$VERSION" > "$BUILDDIR/orginventory/opt/orginventory/VERSION"

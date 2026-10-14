@@ -26,11 +26,16 @@ rm -rf "$PKGROOT"
 mkdir -p "$PKGROOT/opt/orginventory" "$PKGROOT/etc/orginventory" "$PKGROOT/lib/systemd/system" "$PKGROOT/DEBIAN"
 
 # Publish agent self-contained
-dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:EnableCompressionInSingleFile=false \
-  -o "$PKGROOT/opt/orginventory" -p:ApplicationIcon=
+# AGENT_BIN=<path> → đóng gói binary build sẵn (Rust, build-linux-rust.sh) thay vì dotnet publish.
+if [[ -n "${AGENT_BIN:-}" ]]; then
+    install -m 0755 "$AGENT_BIN" "$PKGROOT/opt/orginventory/OrgInventoryAgent"
+else
+    dotnet publish "$HERE/../../linux/src/OrgInventoryAgent.Linux/OrgInventoryAgent.Linux.csproj" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=true \
+      -p:EnableCompressionInSingleFile=false \
+      -o "$PKGROOT/opt/orginventory" -p:ApplicationIcon=
+fi
 
 # Ghi VERSION cạnh binary — install.sh dùng để so sánh manifest auto-upgrade
 printf '%s\n' "$VERSION" > "$PKGROOT/opt/orginventory/VERSION"
