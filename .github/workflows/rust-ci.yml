@@ -140,7 +140,7 @@ jobs:
           ./installer/build-windows-rust.ps1 -Msi -OutDir dist/win-x64
       - name: MSI install/uninstall smoke
         run: |
-          $msi = "installer/OrgInventoryAgent.msi"
+          $msi = (Resolve-Path "installer/OrgInventoryAgent.msi").Path
           $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "$env:RUNNER_TEMP/msi-install.log" -Wait -PassThru
           Write-Host "msiexec exit code: $($p.ExitCode)"
           $svc = Get-Service OrgInventoryAgent -ErrorAction SilentlyContinue
