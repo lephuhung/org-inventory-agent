@@ -44,9 +44,18 @@ fn embed_windows_resources() {
         .set("FileVersion", &ver4)
         .set("ProductVersion", &ver4)
         .set("ProductName", "OrgInventory Agent")
-        .set("FileDescription", "OrgInventory Agent - He thong Quan ly Tai san CNTT & ATTT")
-        .set("CompanyName", "Phong ANM & PCTP su dung CNC, Cong an tinh Ha Tinh")
-        .set("LegalCopyright", "(c) 2025-2026 Phong ANM & PCTP su dung CNC, Cong an tinh Ha Tinh")
+        .set(
+            "FileDescription",
+            "OrgInventory Agent - He thong Quan ly Tai san CNTT & ATTT",
+        )
+        .set(
+            "CompanyName",
+            "Phong ANM & PCTP su dung CNC, Cong an tinh Ha Tinh",
+        )
+        .set(
+            "LegalCopyright",
+            "(c) 2025-2026 Phong ANM & PCTP su dung CNC, Cong an tinh Ha Tinh",
+        )
         .set("OriginalFilename", "OrgInventoryAgent.exe")
         .set("InternalName", "OrgInventoryAgent");
 
