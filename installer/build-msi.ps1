@@ -16,6 +16,8 @@
 param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
+    # Đường dẫn OrgInventoryAgent.exe dựng sẵn (VD từ cargo build) — bỏ qua dotnet publish.
+    [string]$AgentBin = "",
     [switch]$Sign,
     [string]$CertificateThumbprint = ""
 )
@@ -62,15 +64,21 @@ if ($wixMajor -ge 6) {
 }
 Write-Host "WiX: $wixVersion"
 
-# 3. Publish agent (self-contained single-file, co icon/metadata)
-Write-Host "Publish agent ($Runtime, self-contained single-file)..."
-dotnet publish $Project -c $Configuration -r $Runtime --self-contained true -o $PublishDir
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish that bai" }
-$AgentExe = Join-Path $PublishDir "OrgInventoryAgent.exe"
-if (-not (Test-Path $AgentExe)) { throw "Khong thay $AgentExe sau khi publish" }
-# e_sqlite3.dll native phai nam canh exe (publish tat self-extract de tranh AV FP)
-$SqliteDll = Join-Path $PublishDir "e_sqlite3.dll"
-if (-not (Test-Path $SqliteDll)) { throw "Khong thay $SqliteDll sau khi publish - OfflineCache can SQLite native lib" }
+# 3. Agent exe: dotnet publish (.NET) hoặc binary dựng sẵn (-AgentBin, VD Rust build)
+if ([string]::IsNullOrWhiteSpace($AgentBin)) {
+    Write-Host "Publish agent ($Runtime, self-contained single-file)..."
+    dotnet publish $Project -c $Configuration -r $Runtime --self-contained true -o $PublishDir
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish that bai" }
+    $AgentExe = Join-Path $PublishDir "OrgInventoryAgent.exe"
+    if (-not (Test-Path $AgentExe)) { throw "Khong thay $AgentExe sau khi publish" }
+    # e_sqlite3.dll native phai nam canh exe (publish tat self-extract de tranh AV FP)
+    $SqliteDll = Join-Path $PublishDir "e_sqlite3.dll"
+    if (-not (Test-Path $SqliteDll)) { throw "Khong thay $SqliteDll sau khi publish - OfflineCache can SQLite native lib" }
+} else {
+    $AgentExe = (Resolve-Path $AgentBin).Path
+    $SqliteDll = ""   # Rust: rusqlite bundled, không cần dll ngoài
+    Write-Host "Dung binary dung san: $AgentExe"
+}
 
 # 3b. WiX Util extension (util:ServiceConfig cho restart-on-failure), pin cung major WiX.
 # NuGet version co build metadata (5.0.2+aa65968c) nen resolve ten thu muc cache thuc te
@@ -101,7 +109,9 @@ Write-Host "Util extension: $WixExtUtil"
 
 # 4. Build MSI
 Write-Host "Build MSI..."
-& wix build $Wxs -ext $WixExtUtil -d AgentExe=$AgentExe -d AgentSqliteDll=$SqliteDll -o $Msi -arch x64
+$wixArgs = @("build", $Wxs, "-ext", $WixExtUtil, "-d", "AgentExe=$AgentExe", "-o", $Msi, "-arch", "x64")
+if (-not [string]::IsNullOrWhiteSpace($SqliteDll)) { $wixArgs += @("-d", "AgentSqliteDll=$SqliteDll") }
+& wix @wixArgs
 if ($LASTEXITCODE -ne 0) { throw "wix build that bai" }
 
 # 5. Ky Authenticode (neu co)

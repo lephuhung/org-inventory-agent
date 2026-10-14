@@ -284,6 +284,8 @@ impl AgentConfig {
 
 pub fn write_atomic(path: &Path, bytes: &[u8], mode: u32) -> anyhow::Result<()> {
     use std::io::Write;
+    #[cfg(not(unix))]
+    let _ = mode;
     #[cfg(unix)]
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     let mut tmp = path.as_os_str().to_owned();
@@ -340,6 +342,10 @@ impl PosixConfig {
                 }
             }
         }
+        // Windows: overlay registry bootstrap HKLM\SOFTWARE\OrgInventory (intent mới nhất
+        // của lệnh cài — Endpoints/EnrollToken/HttpProxy), như AgentConfig.OverlayRegistryBootstrap.
+        #[cfg(windows)]
+        crate::win_bootstrap::overlay_bootstrap(&mut cfg);
         cfg
     }
 
